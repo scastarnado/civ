@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>4X Strategy Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: #1a1a1a;
+            color: #00ff00;
+            overflow: hidden;
+        }
+
+        #app {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #game-container {
+            flex: 1;
+            display: flex;
+            gap: 10px;
+            padding: 10px;
+            background-color: #0a0a0a;
+        }
+
+        #left-panel {
+            width: 200px;
+            border: 2px solid #00ff00;
+            padding: 10px;
+            background-color: #1a1a1a;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+
+        #canvas-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #00ff00;
+            background-color: #0a0a0a;
+        }
+
+        canvas {
+            border: 1px solid #00ff00;
+            background-color: #000;
+            image-rendering: pixelated;
+        }
+
+        #right-panel {
+            width: 200px;
+            border: 2px solid #00ff00;
+            padding: 10px;
+            background-color: #1a1a1a;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+
+        #bottom-panel {
+            height: 100px;
+            border: 2px solid #00ff00;
+            border-top: none;
+            margin: 0 10px 10px 10px;
+            padding: 10px;
+            background-color: #1a1a1a;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+
+        .panel-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #00ff00;
+        }
+
+        .panel-content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        button {
+            background-color: #003300;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 5px 10px;
+            margin: 5px 5px 5px 0;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        button:hover {
+            background-color: #005500;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+
+        input {
+            background-color: #003300;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <div id="login-screen">
+            <div style="padding: 40px; text-align: center;">
+                <h1 style="margin-bottom: 20px; color: #00ff00;">4X STRATEGY GAME</h1>
+                <div style="margin: 20px 0;">
+                    <div>
+                        <label for="player-name">Player Name:</label><br>
+                        <input type="text" id="player-name" placeholder="Enter your name" value="Player">
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <label for="game-mode">Mode:</label><br>
+                        <select id="game-mode"
+                            style="background-color: #003300; color: #00ff00; border: 1px solid #00ff00; padding: 5px; font-family: 'Courier New', monospace; margin: 5px 0;">
+                            <option value="solo">Solo (AI)</option>
+                            <option value="multiplayer">Multiplayer</option>
+                        </select>
+                    </div>
+                    <div style="margin-top: 20px;">
+                        <button id="start-btn">Start Game</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="game-container" style="display: none;">
+            <div id="left-panel">
+                <div class="panel-title">Selected</div>
+                <div class="panel-content" id="left-content">None selected</div>
+            </div>
+            <div id="canvas-container">
+                <canvas id="gameCanvas" width="1024" height="768"></canvas>
+            </div>
+            <div id="right-panel">
+                <div class="panel-title">Resources</div>
+                <button id="end-turn-btn" style="width: 100%; margin-bottom: 8px;">End Turn (Space/Enter)</button>
+                <div class="panel-content" id="right-content">Gold: 0
+                    Food: 0
+                    Production: 0</div>
+            </div>
+        </div>
+        <div id="bottom-panel" style="display: none;">
+            <div class="panel-title">Events</div>
+            <div class="panel-content" id="event-log">Game started...</div>
+        </div>
+    </div>
+    <script type="module" src="/src/index.ts"></script>
+</body>
+
+</html>

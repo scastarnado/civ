@@ -1,0 +1,24 @@
+{
+    "name": "civ-strategy-game-backend",
+    "version": "1.0.0",
+    "description": "Backend for 4X strategy game",
+    "type": "module",
+    "main": "dist/index.js",
+    "scripts": {
+        "start": "node dist/index.js",
+        "dev": "tsx watch src/index.ts",
+        "build": "tsc",
+        "type-check": "tsc --noEmit"
+    },
+    "dependencies": {
+        "ws": "^8.14.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20.0.0",
+        "@types/ws": "^8.5.0",
+        "esbuild": "^0.27.4",
+        "tsconfig-paths": "^4.2.0",
+        "tsx": "^4.0.0",
+        "typescript": "^5.3.0"
+    }
+}
