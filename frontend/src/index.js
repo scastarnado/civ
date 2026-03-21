@@ -3,6 +3,7 @@
  * Initializes game and connects all systems
  */
 import { GameEngine } from '@/core/GameEngine';
+import { TileType } from '@/core/types';
 import { InputHandler } from '@/input/InputHandler';
 import { NetworkClient } from '@/network/NetworkClient';
 import { CanvasRenderer } from '@/render/CanvasRenderer';
@@ -83,14 +84,14 @@ class GameApplication {
                 credentials: 'include',
                 body: JSON.stringify(body),
             });
-            return await response.json();
+            return (await response.json());
         };
         const getJson = async (url) => {
             const response = await fetch(url, {
                 method: 'GET',
                 credentials: 'include',
             });
-            return await response.json();
+            return (await response.json());
         };
         const setMessage = (text, isError = false) => {
             authMessage.textContent = text;
@@ -100,7 +101,9 @@ class GameApplication {
             selectedPlayerName = name.trim() || 'Player';
             selectedProfileType = type;
             selectedProfile.textContent =
-                type === 'guest' ? `Guest: ${selectedPlayerName}` : `Account: ${selectedPlayerName}`;
+                type === 'guest' ?
+                    `Guest: ${selectedPlayerName}`
+                    : `Account: ${selectedPlayerName}`;
             startBtn.disabled = selectedPlayerName.length === 0;
             logoutBtn.disabled = type !== 'account';
             localStorage.setItem(lastProfileKey, selectedPlayerName);
@@ -463,7 +466,8 @@ class GameApplication {
                             const targetTile = this.gameEngine
                                 .getMapCache()
                                 .getTile(worldPos.x, worldPos.y);
-                            if (targetTile?.type === '^' && unit.type === 'settler') {
+                            if (targetTile?.type === TileType.MOUNTAIN &&
+                                unit.type === 'settler') {
                                 const mountainResult = this.gameEngine.beginMountainDestroyAttempt(this.selectedUnitId, worldPos.x, worldPos.y);
                                 if (mountainResult.ok) {
                                     this.ui?.addEvent(mountainResult.message);
@@ -508,10 +512,10 @@ class GameApplication {
         if (!tile) {
             return 'Cannot move there: unknown tile.';
         }
-        if (tile.type === '~') {
+        if (tile.type === TileType.WATER) {
             return 'Cannot move into water.';
         }
-        if (tile.type === '^' && unit.type !== 'settler') {
+        if (tile.type === TileType.MOUNTAIN && unit.type !== 'settler') {
             return 'Only settlers can enter mountains.';
         }
         const ownMountainTask = this.gameEngine.getMountainDestroyStatusForUnit(unit.id);
@@ -676,6 +680,8 @@ class GameApplication {
                     return;
                 const result = this.gameEngine.startIdleGather(unitId);
                 this.ui.addEvent(result.message);
+            }, () => {
+                // Player chose to ignore — dismissed, no gather started
             });
         }
         else if (status.mode !== 'none') {

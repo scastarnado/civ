@@ -278,7 +278,9 @@ export class GameEngine {
         }
         // Check if destination is walkable (not water, mountain, etc.)
         const tile = this.mapCache.getTile(targetX, targetY);
-        if (!tile || tile.type === TileType.WATER || tile.type === TileType.MOUNTAIN) {
+        if (!tile ||
+            tile.type === TileType.WATER ||
+            tile.type === TileType.MOUNTAIN) {
             return false; // Cannot move to water or mountain
         }
         const moved = unit.x !== targetX || unit.y !== targetY;
@@ -346,12 +348,6 @@ export class GameEngine {
             return null;
         return this.toNodeStatus(node);
     }
-    getResourceStatusAt(x, y) {
-        const node = this.getOrCreateResourceNodeAt(x, y);
-        if (!node)
-            return null;
-        return this.toNodeStatus(node);
-    }
     beginMountainDestroyAttempt(unitId, targetX, targetY) {
         const unit = this.findUnit(unitId);
         if (!unit)
@@ -370,7 +366,7 @@ export class GameEngine {
             return { ok: false, message: 'Not enough movement points.' };
         }
         const tile = this.mapCache.getTile(targetX, targetY);
-        if (!tile || tile.type !== '^') {
+        if (!tile || tile.type !== TileType.MOUNTAIN) {
             return { ok: false, message: 'Target tile is not a mountain.' };
         }
         this.cancelIdleGatherForUnit(unitId);
@@ -426,8 +422,15 @@ export class GameEngine {
             return null;
         return this.toMountainDestroyStatus(task);
     }
+    getResourceStatusAt(x, y) {
+        const node = this.getOrCreateResourceNodeAt(x, y);
+        if (!node)
+            return null;
+        return this.toNodeStatus(node);
+    }
     isPlayerActionLocked(playerId) {
-        return this.isPlayerGatherLocked(playerId) || this.isPlayerMountainLocked(playerId);
+        return (this.isPlayerGatherLocked(playerId) ||
+            this.isPlayerMountainLocked(playerId));
     }
     isPlayerGatherLocked(playerId) {
         for (const node of this.resourceNodes.values()) {
@@ -659,19 +662,19 @@ export class GameEngine {
             const buildingYield = this.getBuildingIdleYield(city);
             player.resources.production +=
                 (city.production + buildingYield.production) *
-                productionPerSecond *
-                deltaSeconds *
-                player.progression.productionMultiplier;
+                    productionPerSecond *
+                    deltaSeconds *
+                    player.progression.productionMultiplier;
             player.resources.food +=
                 (city.food + buildingYield.food) *
-                productionPerSecond *
-                deltaSeconds *
-                player.progression.foodMultiplier;
+                    productionPerSecond *
+                    deltaSeconds *
+                    player.progression.foodMultiplier;
             player.resources.gold +=
                 buildingYield.gold *
-                productionPerSecond *
-                deltaSeconds *
-                player.progression.goldMultiplier;
+                    productionPerSecond *
+                    deltaSeconds *
+                    player.progression.goldMultiplier;
         });
     }
     getPlayerVisionBonus(playerId) {
@@ -769,8 +772,7 @@ export class GameEngine {
             cooldownProgress =
                 node.respawnTurns <= 0 ?
                     1
-                    : (node.respawnTurns - node.respawnTurnsRemaining) /
-                    node.respawnTurns;
+                    : (node.respawnTurns - node.respawnTurnsRemaining) / node.respawnTurns;
         }
         else if (node.activeGather) {
             mode = 'active';
@@ -811,7 +813,7 @@ export class GameEngine {
             task.remainingTurns -= 1;
             if (task.remainingTurns > 0)
                 continue;
-            this.mapCache.setTileType(task.x, task.y, '.');
+            this.mapCache.setTileType(task.x, task.y, TileType.GRASSLAND);
             this.mapCache.clearTileResourceNode(task.x, task.y);
             this.mountainDestroyTasks.delete(unitId);
         }
@@ -831,16 +833,13 @@ export class GameEngine {
         return this.mountainDestroyTasks.has(unitId);
     }
     isUnitBusy(unitId) {
-        return this.isUnitInActiveGather(unitId) || this.isUnitInMountainDestroy(unitId);
+        return (this.isUnitInActiveGather(unitId) || this.isUnitInMountainDestroy(unitId));
     }
     toMountainDestroyStatus(task) {
         const completedTurns = task.totalTurns - task.remainingTurns;
-        const progress =
-            task.mode === 'pending' ?
-                0
-                : task.totalTurns <= 0
-                    ? 1
-                    : Math.min(1, completedTurns / task.totalTurns);
+        const progress = task.mode === 'pending' ? 0
+            : task.totalTurns <= 0 ? 1
+                : Math.min(1, completedTurns / task.totalTurns);
         return {
             x: task.x,
             y: task.y,

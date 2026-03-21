@@ -431,7 +431,8 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
             now - this.lastEventAt < 1600 &&
             this.eventLog.length > 0) {
             this.lastEventRepeatCount += 1;
-            this.eventLog[this.eventLog.length - 1] = `[${timestamp}] ${message} (x${this.lastEventRepeatCount})`;
+            this.eventLog[this.eventLog.length - 1] =
+                `[${timestamp}] ${message} (x${this.lastEventRepeatCount})`;
         }
         else {
             this.lastEventMessage = message;
@@ -518,7 +519,10 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
     }
     showMountainDestroyChoice(status, onDestroy, onIgnore) {
         this.showChoicePrompt(`Mountain at (${status.x}, ${status.y}). Choose action for your settler.`, [
-            { label: `Destroy (${status.totalTurns} turns)`, onClick: onDestroy },
+            {
+                label: `Destroy (${status.totalTurns} turns)`,
+                onClick: onDestroy,
+            },
             { label: 'Ignore', onClick: onIgnore },
         ]);
     }
