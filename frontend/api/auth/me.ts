@@ -1,6 +1,6 @@
-import { ensureSchema, query } from '../_lib/db';
-import { methodNotAllowed } from '../_lib/request';
-import { clearSessionCookie, getSessionUserId } from '../_lib/session';
+import { ensureSchema, query } from '../_lib/db.js';
+import { methodNotAllowed } from '../_lib/request.js';
+import { clearSessionCookie, getSessionUserId } from '../_lib/session.js';
 
 type Req = { method?: string; headers?: { cookie?: string } };
 type Res = {

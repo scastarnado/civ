@@ -1,6 +1,6 @@
-import { ensureSchema, query } from './_lib/db';
-import { badRequest, methodNotAllowed, readJsonBody } from './_lib/request';
-import { getSessionUserId } from './_lib/session';
+import { ensureSchema, query } from './_lib/db.js';
+import { badRequest, methodNotAllowed, readJsonBody } from './_lib/request.js';
+import { getSessionUserId } from './_lib/session.js';
 
 type Req = {
 	method?: string;

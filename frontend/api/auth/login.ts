@@ -1,8 +1,8 @@
 import bcrypt from 'bcryptjs';
 
-import { ensureSchema, query } from '../_lib/db';
-import { badRequest, methodNotAllowed, readJsonBody } from '../_lib/request';
-import { setSessionCookie } from '../_lib/session';
+import { ensureSchema, query } from '../_lib/db.js';
+import { badRequest, methodNotAllowed, readJsonBody } from '../_lib/request.js';
+import { setSessionCookie } from '../_lib/session.js';
 
 type Req = { method?: string; body?: unknown; on?: any };
 type Res = {
