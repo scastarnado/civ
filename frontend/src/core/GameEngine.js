@@ -2,7 +2,7 @@
  * Core Game Engine
  * Manages main game loop, turns, and state transitions
  */
-import { CityBuildingType, ResearchType, ResourceNodeType, UnitType, } from '@/core/types';
+import { CityBuildingType, ResearchType, ResourceNodeType, TileType, UnitType, } from '@/core/types';
 import { MapCache } from '@/map/ChunkSystem';
 const RESOURCE_PROFILES = {
     [ResourceNodeType.WHEAT]: {
@@ -134,6 +134,7 @@ export class GameEngine {
         this.isRunning = false;
         this.tickCallbacks = [];
         this.resourceNodes = new Map();
+        this.mountainDestroyTasks = new Map();
         this.mapCache = new MapCache(worldSeed);
         this.gameState = {
             id: this.generateId(),
@@ -251,6 +252,7 @@ export class GameEngine {
             this.gameState.turn++;
         }
         this.progressResourceRespawnsByTurn();
+        this.progressMountainDestroyByTurn();
     }
     getCurrentPlayer() {
         return this.gameState.players[this.currentPlayerIndex];
@@ -266,7 +268,7 @@ export class GameEngine {
         const unit = this.findUnit(unitId);
         if (!unit)
             return false;
-        if (this.isUnitInActiveGather(unitId)) {
+        if (this.isUnitBusy(unitId)) {
             return false;
         }
         // Calculate distance (simplified Manhattan distance)
@@ -276,7 +278,7 @@ export class GameEngine {
         }
         // Check if destination is walkable (not water, mountain, etc.)
         const tile = this.mapCache.getTile(targetX, targetY);
-        if (!tile || tile.type === '~' || tile.type === '^') {
+        if (!tile || tile.type === TileType.WATER || tile.type === TileType.MOUNTAIN) {
             return false; // Cannot move to water or mountain
         }
         const moved = unit.x !== targetX || unit.y !== targetY;
@@ -350,9 +352,94 @@ export class GameEngine {
             return null;
         return this.toNodeStatus(node);
     }
+    beginMountainDestroyAttempt(unitId, targetX, targetY) {
+        const unit = this.findUnit(unitId);
+        if (!unit)
+            return { ok: false, message: 'Unit not found.' };
+        if (unit.type !== UnitType.SETTLER) {
+            return { ok: false, message: 'Only settlers can destroy mountains.' };
+        }
+        if (this.isUnitBusy(unitId)) {
+            return {
+                ok: false,
+                message: 'This unit is already busy with another action.',
+            };
+        }
+        const distance = Math.abs(unit.x - targetX) + Math.abs(unit.y - targetY);
+        if (distance > unit.movementPoints) {
+            return { ok: false, message: 'Not enough movement points.' };
+        }
+        const tile = this.mapCache.getTile(targetX, targetY);
+        if (!tile || tile.type !== '^') {
+            return { ok: false, message: 'Target tile is not a mountain.' };
+        }
+        this.cancelIdleGatherForUnit(unitId);
+        const task = {
+            unitId,
+            playerId: unit.ownerId,
+            x: targetX,
+            y: targetY,
+            originX: unit.x,
+            originY: unit.y,
+            movementSpent: distance,
+            totalTurns: 10,
+            remainingTurns: 10,
+            mode: 'pending',
+        };
+        unit.x = targetX;
+        unit.y = targetY;
+        unit.movementPoints = Math.max(0, unit.movementPoints - distance);
+        this.mountainDestroyTasks.set(unitId, task);
+        return {
+            ok: true,
+            message: 'Settler reached mountain. Choose destroy or ignore.',
+        };
+    }
+    confirmMountainDestroy(unitId) {
+        const task = this.mountainDestroyTasks.get(unitId);
+        if (!task) {
+            return { ok: false, message: 'No mountain action found for this unit.' };
+        }
+        task.mode = 'destroying';
+        return {
+            ok: true,
+            message: `Mountain destruction started (${task.totalTurns} turns).`,
+        };
+    }
+    cancelMountainDestroy(unitId) {
+        const task = this.mountainDestroyTasks.get(unitId);
+        if (!task) {
+            return { ok: false, message: 'No mountain action found for this unit.' };
+        }
+        const unit = this.findUnit(unitId);
+        if (unit) {
+            unit.x = task.originX;
+            unit.y = task.originY;
+            unit.movementPoints = Math.min(unit.maxMovementPoints, unit.movementPoints + task.movementSpent);
+        }
+        this.mountainDestroyTasks.delete(unitId);
+        return { ok: true, message: 'Mountain action ignored. Settler returned.' };
+    }
+    getMountainDestroyStatusForUnit(unitId) {
+        const task = this.mountainDestroyTasks.get(unitId);
+        if (!task)
+            return null;
+        return this.toMountainDestroyStatus(task);
+    }
     isPlayerActionLocked(playerId) {
+        return this.isPlayerGatherLocked(playerId) || this.isPlayerMountainLocked(playerId);
+    }
+    isPlayerGatherLocked(playerId) {
         for (const node of this.resourceNodes.values()) {
             if (node.activeGather?.playerId === playerId) {
+                return true;
+            }
+        }
+        return false;
+    }
+    isPlayerMountainLocked(playerId) {
+        for (const task of this.mountainDestroyTasks.values()) {
+            if (task.playerId === playerId) {
                 return true;
             }
         }
@@ -366,7 +453,7 @@ export class GameEngine {
         if (!city)
             return null;
         const unitCost = this.getUnitProductionCost(unitType);
-        const player = this.gameState.players.find((p) => p.id === city.ownerId);
+        const player = this.findPlayer(city.ownerId);
         if (!player || player.resources.production < unitCost) {
             return null; // Not enough production
         }
@@ -396,7 +483,7 @@ export class GameEngine {
         if (!settler || settler.type !== UnitType.SETTLER) {
             return null;
         }
-        const player = this.gameState.players.find((p) => p.id === settler.ownerId);
+        const player = this.findPlayer(settler.ownerId);
         if (!player)
             return null;
         const newCity = {
@@ -432,7 +519,7 @@ export class GameEngine {
         defender.health -= damage;
         if (defender.health <= 0) {
             // Remove defeated unit
-            const owner = this.gameState.players.find((p) => p.id === defender.ownerId);
+            const owner = this.findPlayer(defender.ownerId);
             if (owner) {
                 owner.units = owner.units.filter((u) => u.id !== defenderUnitId);
             }
@@ -463,7 +550,7 @@ export class GameEngine {
     }
     // ============ Helper Methods ============
     getCityManagementData(playerId, cityId) {
-        const player = this.gameState.players.find((p) => p.id === playerId);
+        const player = this.findPlayer(playerId);
         if (!player)
             return null;
         const city = player.cities.find((c) => c.id === cityId);
@@ -511,7 +598,7 @@ export class GameEngine {
         };
     }
     applyCityOption(playerId, cityId, optionId) {
-        const player = this.gameState.players.find((p) => p.id === playerId);
+        const player = this.findPlayer(playerId);
         if (!player)
             return { ok: false, message: 'Player not found.' };
         const city = player.cities.find((c) => c.id === cityId);
@@ -572,23 +659,23 @@ export class GameEngine {
             const buildingYield = this.getBuildingIdleYield(city);
             player.resources.production +=
                 (city.production + buildingYield.production) *
-                    productionPerSecond *
-                    deltaSeconds *
-                    player.progression.productionMultiplier;
+                productionPerSecond *
+                deltaSeconds *
+                player.progression.productionMultiplier;
             player.resources.food +=
                 (city.food + buildingYield.food) *
-                    productionPerSecond *
-                    deltaSeconds *
-                    player.progression.foodMultiplier;
+                productionPerSecond *
+                deltaSeconds *
+                player.progression.foodMultiplier;
             player.resources.gold +=
                 buildingYield.gold *
-                    productionPerSecond *
-                    deltaSeconds *
-                    player.progression.goldMultiplier;
+                productionPerSecond *
+                deltaSeconds *
+                player.progression.goldMultiplier;
         });
     }
     getPlayerVisionBonus(playerId) {
-        const player = this.gameState.players.find((p) => p.id === playerId);
+        const player = this.findPlayer(playerId);
         if (!player)
             return 0;
         return player.progression.visionBonus;
@@ -632,7 +719,7 @@ export class GameEngine {
     harvestNodeAmount(node, amount, playerId) {
         if (amount <= 0)
             return;
-        const player = this.gameState.players.find((p) => p.id === playerId);
+        const player = this.findPlayer(playerId);
         if (!player)
             return;
         const ratio = amount / node.capacity;
@@ -683,7 +770,7 @@ export class GameEngine {
                 node.respawnTurns <= 0 ?
                     1
                     : (node.respawnTurns - node.respawnTurnsRemaining) /
-                        node.respawnTurns;
+                    node.respawnTurns;
         }
         else if (node.activeGather) {
             mode = 'active';
@@ -717,6 +804,18 @@ export class GameEngine {
             }
         }
     }
+    progressMountainDestroyByTurn() {
+        for (const [unitId, task] of this.mountainDestroyTasks.entries()) {
+            if (task.mode !== 'destroying')
+                continue;
+            task.remainingTurns -= 1;
+            if (task.remainingTurns > 0)
+                continue;
+            this.mapCache.setTileType(task.x, task.y, '.');
+            this.mapCache.clearTileResourceNode(task.x, task.y);
+            this.mountainDestroyTasks.delete(unitId);
+        }
+    }
     resourceNodeKey(x, y) {
         return `${x},${y}`;
     }
@@ -728,12 +827,38 @@ export class GameEngine {
         }
         return false;
     }
+    isUnitInMountainDestroy(unitId) {
+        return this.mountainDestroyTasks.has(unitId);
+    }
+    isUnitBusy(unitId) {
+        return this.isUnitInActiveGather(unitId) || this.isUnitInMountainDestroy(unitId);
+    }
+    toMountainDestroyStatus(task) {
+        const completedTurns = task.totalTurns - task.remainingTurns;
+        const progress =
+            task.mode === 'pending' ?
+                0
+                : task.totalTurns <= 0
+                    ? 1
+                    : Math.min(1, completedTurns / task.totalTurns);
+        return {
+            x: task.x,
+            y: task.y,
+            mode: task.mode,
+            totalTurns: task.totalTurns,
+            remainingTurns: task.remainingTurns,
+            progress,
+        };
+    }
     cancelIdleGatherForUnit(unitId) {
         for (const node of this.resourceNodes.values()) {
             if (node.idleGather?.unitId === unitId) {
                 node.idleGather = undefined;
             }
         }
+    }
+    findPlayer(playerId) {
+        return this.gameState.players.find((player) => player.id === playerId);
     }
     findUnit(unitId) {
         for (const player of this.gameState.players) {

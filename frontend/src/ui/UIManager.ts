@@ -7,6 +7,7 @@ import {
 	City,
 	CityManagementData,
 	CityManagementOption,
+	MountainDestroyStatus,
 	Player,
 	ResourceNodeStatus,
 	Unit,
@@ -57,6 +58,9 @@ export class UIManager {
 	private rightPanelPlayer: Player | null = null;
 	private eventLog: string[] = [];
 	private maxLogEntries: number = 50;
+	private lastEventMessage: string | null = null;
+	private lastEventAt: number = 0;
+	private lastEventRepeatCount: number = 0;
 	private resourcePromptOverlay: HTMLDivElement;
 	private resourcePromptText: HTMLDivElement;
 	private resourceProgressOverlay: HTMLDivElement;
@@ -66,9 +70,18 @@ export class UIManager {
 	private cityOverlay: HTMLDivElement;
 	private cityOverlayContent: HTMLDivElement;
 	private cityOverlayOnClose: (() => void) | null = null;
+	private tutorialOverlay: HTMLDivElement;
+	private tutorialPanel: HTMLDivElement;
+	private tutorialContent: HTMLDivElement;
+	private tutorialActiveTab:
+		| 'basics'
+		| 'map'
+		| 'turns'
+		| 'economy'
+		| 'upgrades' = 'basics';
 	private turnInfoText: string = 'Turn: 0';
 	private controlsText: string =
-		'CONTROLS\n- End Turn: Space / Enter\n- Select/Move: Left Click\n- Camera: WASD / Arrows';
+		'CONTROLS\n- End Turn: Space / Enter\n- Select/Move: Left Click\n- Camera: WASD / Arrows\n- Handbook: H / Esc\n- Focus Selected: F';
 
 	constructor() {
 		this.leftPanel = new UIPanel('left-panel');
@@ -84,6 +97,10 @@ export class UIManager {
 		const cityOverlay = this.createCityOverlay();
 		this.cityOverlay = cityOverlay.overlay;
 		this.cityOverlayContent = cityOverlay.content;
+		const tutorialOverlay = this.createTutorialOverlay();
+		this.tutorialOverlay = tutorialOverlay.overlay;
+		this.tutorialPanel = tutorialOverlay.panel;
+		this.tutorialContent = tutorialOverlay.content;
 
 		const rightContent = document.getElementById('right-content');
 		if (!rightContent) {
@@ -283,6 +300,170 @@ Researched: ${player.techs.length}`;
 		};
 	}
 
+	private createTutorialOverlay(): {
+		overlay: HTMLDivElement;
+		panel: HTMLDivElement;
+		content: HTMLDivElement;
+	} {
+		const overlay = document.createElement('div');
+		overlay.style.position = 'fixed';
+		overlay.style.inset = '0';
+		overlay.style.background = 'rgba(0, 0, 0, 0.72)';
+		overlay.style.display = 'none';
+		overlay.style.zIndex = '30';
+
+		const panel = document.createElement('div');
+		panel.style.position = 'absolute';
+		panel.style.left = '50%';
+		panel.style.top = '50%';
+		panel.style.transform = 'translate(-50%, -50%)';
+		panel.style.width = 'min(960px, 94vw)';
+		panel.style.maxHeight = '86vh';
+		panel.style.background = '#0f0f0f';
+		panel.style.border = '2px solid #00ff00';
+		panel.style.padding = '12px';
+		panel.style.overflow = 'hidden';
+		overlay.appendChild(panel);
+
+		const titleRow = document.createElement('div');
+		titleRow.style.display = 'flex';
+		titleRow.style.justifyContent = 'space-between';
+		titleRow.style.alignItems = 'center';
+		titleRow.style.marginBottom = '8px';
+
+		const title = document.createElement('div');
+		title.textContent = 'Strategy Handbook';
+		title.style.fontWeight = 'bold';
+		title.style.fontSize = '15px';
+		titleRow.appendChild(title);
+
+		const closeBtn = document.createElement('button');
+		closeBtn.textContent = 'Close (Esc)';
+		closeBtn.addEventListener('click', () => this.hideTutorialMenu());
+		titleRow.appendChild(closeBtn);
+		panel.appendChild(titleRow);
+
+		const tabRow = document.createElement('div');
+		tabRow.style.display = 'grid';
+		tabRow.style.gridTemplateColumns = 'repeat(5, minmax(0, 1fr))';
+		tabRow.style.gap = '6px';
+		tabRow.style.marginBottom = '10px';
+
+		const tabs: Array<{
+			key: 'basics' | 'map' | 'turns' | 'economy' | 'upgrades';
+			label: string;
+		}> = [
+			{ key: 'basics', label: 'Basics' },
+			{ key: 'map', label: 'Map & Cells' },
+			{ key: 'turns', label: 'Turns & Actions' },
+			{ key: 'economy', label: 'Economy' },
+			{ key: 'upgrades', label: 'Upgrades' },
+		];
+
+		tabs.forEach((tab) => {
+			const btn = document.createElement('button');
+			btn.textContent = tab.label;
+			btn.dataset.tutorialTab = tab.key;
+			btn.style.width = '100%';
+			btn.style.margin = '0';
+			btn.style.padding = '6px';
+			btn.addEventListener('click', () => {
+				this.tutorialActiveTab = tab.key;
+				this.renderTutorialContent();
+			});
+			tabRow.appendChild(btn);
+		});
+		panel.appendChild(tabRow);
+
+		const content = document.createElement('div');
+		content.style.maxHeight = 'calc(86vh - 110px)';
+		content.style.overflowY = 'auto';
+		content.style.border = '1px solid #00aa00';
+		content.style.padding = '10px';
+		content.style.lineHeight = '1.5';
+		panel.appendChild(content);
+
+		overlay.addEventListener('click', (event) => {
+			if (event.target === overlay) {
+				this.hideTutorialMenu();
+			}
+		});
+
+		document.body.appendChild(overlay);
+
+		return { overlay, panel, content };
+	}
+
+	private renderTutorialContent(): void {
+		const tabContent: Record<string, string> = {
+			basics: `<div style="margin-bottom:10px;"><strong>Quick Objective</strong><br>Grow cities, field units, gather resources, and out-scale rival players over turns.</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;">
+<div style="border:1px solid #00aa00;padding:8px;"><strong>1) Expand</strong><br>Use <strong>S</strong> (Settler) to create new cities.</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>2) Harvest</strong><br>Move units onto resource markers and choose Active/Idle/Ignore.</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>3) Build Power</strong><br>Open city management to unlock buildings and research.</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>4) Control Tempo</strong><br>End turns efficiently while preserving production momentum.</div>
+</div>
+<div style="margin-top:10px;border:1px solid #00aa00;padding:8px;"><strong>Input Reference</strong><br>Left Click: select/move | Space/Enter: end turn | Arrows/WASD: camera | Esc: close panel, then open/close this handbook.</div>`,
+			map: `<div style="margin-bottom:8px;"><strong>Cell Legend (what each cell means)</strong></div>
+<div style="font-family:'Courier New',monospace;border:1px solid #00aa00;padding:8px;white-space:pre-wrap;">.  Grassland   (walkable)
+T  Forest      (walkable)
+^  Mountain    (not walkable)
+~  Water       (not walkable)
+
+w  Wheat node  -> food-focused harvest
+d  Deer node   -> food + a bit of gold
+i  Iron node   -> production-focused harvest
+h  Horses node -> balanced mobile economy
+$  Gold node   -> gold-focused harvest
+
+C  City center (population number shown next to C)
+S/W/! Units    Settler / Worker / Warrior</div>
+<div style="margin-top:8px;border:1px solid #00aa00;padding:8px;"><strong>Interactions with player</strong><br>Walkable cells let your units move and stand. Resource cells trigger a gather choice. Mountain/water cells block movement and can shape chokepoints.</div>
+<div style="margin-top:8px;border:1px solid #00aa00;padding:8px;"><strong>Visibility</strong><br>Bright tiles are currently visible. Dim tiles are discovered but currently outside vision.</div>`,
+			turns: `<div style="margin-bottom:8px;"><strong>What you can do each turn</strong></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px;">
+<div style="border:1px solid #00aa00;padding:8px;"><strong>Unit Actions</strong><br>- Move within movement points<br>- Settle city (Settler only)<br>- Start gather on a resource tile<br>- Attack (Warrior)</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>City Actions</strong><br>- Open city management<br>- Build one building/research option if affordable<br>- Spend production to create units</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>Gathering Modes</strong><br><strong>Active</strong>: one-time full harvest after a short lock.<br><strong>Idle</strong>: periodic small harvest chunks over time.<br><strong>Ignore</strong>: no gather started.</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>Turn Flow</strong><br>When you end turn, units reset movement for that player. Node respawn counters also tick down by turn.</div>
+</div>
+<div style="margin-top:8px;border:1px solid #00aa00;padding:8px;"><strong>Important rule</strong><br>If a player has an <strong>active gather</strong> running, actions are temporarily locked until it completes.</div>`,
+			economy: `<div style="margin-bottom:8px;"><strong>How economy works</strong></div>
+<div style="border:1px solid #00aa00;padding:8px;margin-bottom:8px;"><strong>Passive income (always on)</strong><br>Each city continuously contributes food and production over time, modified by multipliers and building bonuses. Gold is primarily from certain buildings plus gold resource harvesting.</div>
+<div style="border:1px solid #00aa00;padding:8px;margin-bottom:8px;"><strong>Node economy</strong><br>Resource nodes have capacity. Harvesting drains capacity. When empty, node enters cooldown for several turns, then refills to full.</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;">
+<div style="border:1px solid #00aa00;padding:8px;"><strong>Spend Gold</strong><br>Buildings + research</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>Spend Food</strong><br>Some research/buildings</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>Spend Production</strong><br>Units + buildings + research</div>
+</div>
+<div style="margin-top:8px;border:1px solid #00aa00;padding:8px;"><strong>Tempo tip</strong><br>Chain passive city growth with idle gathering, then spike with active harvest when you need a fast purchase.</div>`,
+			upgrades: `<div style="margin-bottom:8px;"><strong>Buildings & Research Impact</strong></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px;">
+<div style="border:1px solid #00aa00;padding:8px;"><strong>Buildings</strong><br>Granary: boosts passive food<br>Workshop: boosts passive production<br>Market: adds passive gold<br>Barracks: increases combat power (+attack progression)<br>Watchtower: adds vision progression (requires Scouting)</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>Research</strong><br>Logistics: +1 movement to units<br>Scouting: +1 vision<br>Metallurgy: +1 attack and +1 defense (requires Logistics)<br>Agronomy: +20% passive food<br>Industrialization: +20% passive production (requires Agronomy)</div>
+</div>
+<div style="margin-top:8px;border:1px solid #00aa00;padding:8px;"><strong>City scaling</strong><br>As buildings accumulate, city level and footprint increase, making city presence more visible on the map.</div>
+<div style="margin-top:8px;border:1px solid #00aa00;padding:8px;"><strong>Practical build order</strong><br>Early: Granary/Workshop -> Mid: Logistics + Market -> Late: Metallurgy + Industrialization.</div>`,
+		};
+
+		this.tutorialContent.innerHTML =
+			tabContent[this.tutorialActiveTab] || tabContent.basics;
+
+		const tabButtons = this.tutorialPanel.querySelectorAll(
+			'button[data-tutorial-tab]',
+		);
+		tabButtons.forEach((button) => {
+			const btn = button as HTMLButtonElement;
+			const active = btn.dataset.tutorialTab === this.tutorialActiveTab;
+			btn.style.backgroundColor = '#003300';
+			btn.style.borderColor = '#00ff00';
+			if (active) {
+				btn.style.backgroundColor = '#006600';
+				btn.style.borderColor = '#aaffaa';
+			}
+		});
+	}
+
 	/**
 	 * Update left panel with selected entity info
 	 */
@@ -350,8 +531,23 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
 	 * Add event to log
 	 */
 	addEvent(message: string): void {
+		const now = Date.now();
 		const timestamp = new Date().toLocaleTimeString();
-		this.eventLog.push(`[${timestamp}] ${message}`);
+
+		if (
+			this.lastEventMessage === message &&
+			now - this.lastEventAt < 1600 &&
+			this.eventLog.length > 0
+		) {
+			this.lastEventRepeatCount += 1;
+			this.eventLog[this.eventLog.length - 1] =
+				`[${timestamp}] ${message} (x${this.lastEventRepeatCount})`;
+		} else {
+			this.lastEventMessage = message;
+			this.lastEventAt = now;
+			this.lastEventRepeatCount = 1;
+			this.eventLog.push(`[${timestamp}] ${message}`);
+		}
 
 		// Keep log size limited
 		if (this.eventLog.length > this.maxLogEntries) {
@@ -368,12 +564,8 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
 		this.bottomPanel.setContent(this.eventLog.join('\n'));
 
 		// Auto-scroll to bottom
-		const contentElement = this.bottomPanel
-			.getContainer()
-			.querySelector('.panel-content');
-		if (contentElement) {
-			contentElement.scrollTop = contentElement.scrollHeight;
-		}
+		const container = this.bottomPanel.getContainer();
+		container.scrollTop = container.scrollHeight;
 	}
 
 	/**
@@ -412,41 +604,82 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
 		);
 	}
 
-	showResourceChoice(
-		status: ResourceNodeStatus,
-		onActive: () => void,
-		onIdle: () => void,
+	private createPromptButton(
+		label: string,
+		onClick: () => void,
+	): HTMLButtonElement {
+		const button = document.createElement('button');
+		button.textContent = label;
+		button.style.width = '100%';
+		button.addEventListener('click', () => {
+			this.resourcePromptOverlay.style.display = 'none';
+			onClick();
+		});
+		return button;
+	}
+
+	private showChoicePrompt(
+		message: string,
+		buttons: Array<{ label: string; onClick: () => void }>,
 	): void {
 		this.resourcePromptOverlay.innerHTML = '';
 
 		this.resourcePromptText = document.createElement('div');
 		this.resourcePromptText.style.marginBottom = '10px';
-		this.resourcePromptText.textContent = `Resource found: ${status.type.toUpperCase()} at (${status.x}, ${status.y}). Choose how to gather.`;
+		this.resourcePromptText.textContent = message;
 		this.resourcePromptOverlay.appendChild(this.resourcePromptText);
 
-		const activeBtn = document.createElement('button');
-		activeBtn.textContent = 'Active Gather';
-		activeBtn.addEventListener('click', () => {
-			this.resourcePromptOverlay.style.display = 'none';
-			onActive();
-		});
-
-		const idleBtn = document.createElement('button');
-		idleBtn.textContent = 'Idle Gather';
-		idleBtn.addEventListener('click', () => {
-			this.resourcePromptOverlay.style.display = 'none';
-			onIdle();
-		});
-
 		const buttonRow = document.createElement('div');
-		buttonRow.appendChild(activeBtn);
-		buttonRow.appendChild(idleBtn);
-		this.resourcePromptOverlay.appendChild(buttonRow);
+		buttonRow.style.display = 'flex';
+		buttonRow.style.flexDirection = 'column';
+		buttonRow.style.gap = '6px';
 
+		buttons.forEach(({ label, onClick }) => {
+			buttonRow.appendChild(this.createPromptButton(label, onClick));
+		});
+
+		this.resourcePromptOverlay.appendChild(buttonRow);
 		this.resourcePromptOverlay.style.display = 'block';
 	}
 
+	showResourceChoice(
+		status: ResourceNodeStatus,
+		onActive: () => void,
+		onIdle: () => void,
+		onIgnore: () => void,
+	): void {
+		this.showChoicePrompt(
+			`Resource found: ${status.type.toUpperCase()} at (${status.x}, ${status.y}). Choose how to gather.`,
+			[
+				{ label: 'Active Gather', onClick: onActive },
+				{ label: 'Idle Gather', onClick: onIdle },
+				{ label: 'Ignore', onClick: onIgnore },
+			],
+		);
+	}
+
+	showMountainDestroyChoice(
+		status: MountainDestroyStatus,
+		onDestroy: () => void,
+		onIgnore: () => void,
+	): void {
+		this.showChoicePrompt(
+			`Mountain at (${status.x}, ${status.y}). Choose action for your settler.`,
+			[
+				{
+					label: `Destroy (${status.totalTurns} turns)`,
+					onClick: onDestroy,
+				},
+				{ label: 'Ignore', onClick: onIgnore },
+			],
+		);
+	}
+
 	hideResourceChoice(): void {
+		this.resourcePromptOverlay.style.display = 'none';
+	}
+
+	hideMountainDestroyChoice(): void {
 		this.resourcePromptOverlay.style.display = 'none';
 	}
 
@@ -594,6 +827,27 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
 		this.cityOverlayOnClose = null;
 	}
 
+	showTutorialMenu(): void {
+		this.tutorialOverlay.style.display = 'block';
+		this.renderTutorialContent();
+	}
+
+	hideTutorialMenu(): void {
+		this.tutorialOverlay.style.display = 'none';
+	}
+
+	toggleTutorialMenu(): void {
+		if (this.isTutorialMenuOpen()) {
+			this.hideTutorialMenu();
+		} else {
+			this.showTutorialMenu();
+		}
+	}
+
+	isTutorialMenuOpen(): boolean {
+		return this.tutorialOverlay.style.display !== 'none';
+	}
+
 	closeActivePanel(): boolean {
 		if (this.cityOverlay.style.display !== 'none') {
 			this.hideCityManagement(true);
@@ -602,6 +856,11 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
 
 		if (this.resourcePromptOverlay.style.display !== 'none') {
 			this.hideResourceChoice();
+			return true;
+		}
+
+		if (this.tutorialOverlay.style.display !== 'none') {
+			this.hideTutorialMenu();
 			return true;
 		}
 
@@ -641,6 +900,25 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
 
 		this.resourceProgressFillA.style.width = `${Math.floor(progressA * 100)}%`;
 		this.resourceProgressFillB.style.width = `${Math.floor(progressB * 100)}%`;
+		this.resourceProgressOverlay.style.display = 'block';
+	}
+
+	updateMountainDestroyStatus(status: MountainDestroyStatus | null): void {
+		if (!status) {
+			this.resourceProgressOverlay.style.display = 'none';
+			return;
+		}
+
+		if (status.mode === 'pending') {
+			this.resourceProgressOverlay.style.display = 'none';
+			return;
+		}
+
+		const turnsDone = status.totalTurns - status.remainingTurns;
+		this.resourceProgressText.textContent = `Mountain destruction at (${status.x}, ${status.y}) - ${status.remainingTurns} turn(s) left`;
+
+		this.resourceProgressFillA.style.width = `${Math.floor(status.progress * 100)}%`;
+		this.resourceProgressFillB.style.width = `${Math.floor((turnsDone / status.totalTurns) * 100)}%`;
 		this.resourceProgressOverlay.style.display = 'block';
 	}
 }

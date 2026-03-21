@@ -188,6 +188,20 @@ export class MapCache {
         const chunk = this.getChunk(cx, cy);
         return chunk.tiles.find((t) => t.x === x && t.y === y) || null;
     }
+    setTileType(x, y, type) {
+        const tile = this.getTile(x, y);
+        if (!tile)
+            return false;
+        tile.type = type;
+        return true;
+    }
+    clearTileResourceNode(x, y) {
+        const tile = this.getTile(x, y);
+        if (!tile)
+            return false;
+        delete tile.resourceNode;
+        return true;
+    }
     /**
      * Get all tiles in a rectangular region
      */

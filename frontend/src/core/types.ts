@@ -177,6 +177,17 @@ export interface ResourceNodeStatus {
 	idleTickProgress: number;
 }
 
+export type MountainDestroyMode = 'pending' | 'destroying';
+
+export interface MountainDestroyStatus {
+	x: number;
+	y: number;
+	mode: MountainDestroyMode;
+	totalTurns: number;
+	remainingTurns: number;
+	progress: number;
+}
+
 // Game state
 export interface GameState {
 	id: string;

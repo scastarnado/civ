@@ -19,6 +19,15 @@
             overflow: hidden;
         }
 
+        :root {
+            --hud-green: #00ff88;
+            --hud-green-dim: #00aa66;
+            --hud-bg: #0e1110;
+            --hud-panel: #141b17;
+            --hud-border: #1eff95;
+            --hud-danger: #ff5f5f;
+        }
+
         #app {
             width: 100vw;
             height: 100vh;
@@ -59,7 +68,7 @@
         }
 
         #right-panel {
-            width: 200px;
+            width: 280px;
             border: 2px solid #00ff00;
             padding: 10px;
             background-color: #1a1a1a;
@@ -109,14 +118,160 @@
             padding: 20px;
         }
 
-        input {
+        input,
+        select {
             background-color: #003300;
             color: #00ff00;
             border: 1px solid #00ff00;
-            padding: 5px;
+            padding: 7px 8px;
             font-family: 'Courier New', monospace;
             font-size: 12px;
             margin: 5px 0;
+            width: 100%;
+        }
+
+        #login-screen {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background:
+                radial-gradient(circle at 15% 15%, rgba(15, 88, 48, 0.45), transparent 35%),
+                radial-gradient(circle at 85% 75%, rgba(8, 61, 34, 0.4), transparent 40%),
+                linear-gradient(140deg, #090d0b, #0f1612 45%, #090d0b);
+        }
+
+        .menu-shell {
+            width: min(940px, 96vw);
+            border: 2px solid var(--hud-border);
+            background: linear-gradient(180deg, #101712, #0d130f);
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            box-shadow: 0 0 40px rgba(0, 255, 136, 0.16);
+            overflow: hidden;
+        }
+
+        .menu-hero {
+            padding: 26px;
+            border-right: 1px solid var(--hud-green-dim);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 12px;
+            background:
+                linear-gradient(180deg, rgba(3, 38, 20, 0.4), rgba(0, 0, 0, 0)),
+                repeating-linear-gradient(0deg, rgba(0, 255, 136, 0.03), rgba(0, 255, 136, 0.03) 1px, transparent 1px, transparent 10px);
+        }
+
+        .menu-title {
+            font-size: clamp(28px, 4vw, 42px);
+            letter-spacing: 2px;
+            color: var(--hud-green);
+            text-shadow: 0 0 14px rgba(0, 255, 136, 0.35);
+            line-height: 1;
+        }
+
+        .menu-subtitle {
+            color: #9ef5cf;
+            line-height: 1.6;
+            font-size: 13px;
+            max-width: 42ch;
+        }
+
+        .menu-kpis {
+            border: 1px solid var(--hud-green-dim);
+            padding: 10px;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #87eabf;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .menu-auth {
+            padding: 18px;
+            background: var(--hud-bg);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .menu-tabs {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 6px;
+        }
+
+        .menu-tab {
+            width: 100%;
+            margin: 0;
+            padding: 7px;
+            border: 1px solid var(--hud-green-dim);
+            background: #0d2a19;
+            color: #9ef5cf;
+        }
+
+        .menu-tab.active {
+            background: #0f5b34;
+            border-color: var(--hud-border);
+            color: #d9ffeb;
+        }
+
+        .auth-panel {
+            display: none;
+            border: 1px solid var(--hud-green-dim);
+            background: var(--hud-panel);
+            padding: 12px;
+            gap: 8px;
+        }
+
+        .auth-panel.active {
+            display: grid;
+        }
+
+        .menu-row {
+            display: grid;
+            gap: 6px;
+        }
+
+        .menu-row label {
+            font-size: 11px;
+            color: #9ef5cf;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .menu-bottom {
+            border: 1px solid var(--hud-green-dim);
+            background: #111811;
+            padding: 12px;
+            display: grid;
+            gap: 8px;
+        }
+
+        #auth-message {
+            min-height: 18px;
+            font-size: 12px;
+            color: #9ef5cf;
+        }
+
+        #selected-profile-name {
+            color: #d9ffeb;
+            font-weight: bold;
+        }
+
+        @media (max-width: 860px) {
+            .menu-shell {
+                grid-template-columns: 1fr;
+                max-height: 95vh;
+                overflow-y: auto;
+            }
+
+            .menu-hero {
+                border-right: none;
+                border-bottom: 1px solid var(--hud-green-dim);
+            }
         }
     </style>
 </head>
@@ -124,25 +279,84 @@
 <body>
     <div id="app">
         <div id="login-screen">
-            <div style="padding: 40px; text-align: center;">
-                <h1 style="margin-bottom: 20px; color: #00ff00;">4X STRATEGY GAME</h1>
-                <div style="margin: 20px 0;">
+            <div class="menu-shell">
+                <section class="menu-hero">
                     <div>
-                        <label for="player-name">Player Name:</label><br>
-                        <input type="text" id="player-name" placeholder="Enter your name" value="Player">
+                        <h1 class="menu-title">4X STRATEGY GAME</h1>
+                        <p class="menu-subtitle" style="margin-top: 12px;">
+                            Build cities, command units, and outscale rival civilizations.
+                            Choose a profile, pick your mode, and launch your campaign.
+                        </p>
                     </div>
-                    <div style="margin-top: 10px;">
-                        <label for="game-mode">Mode:</label><br>
-                        <select id="game-mode"
-                            style="background-color: #003300; color: #00ff00; border: 1px solid #00ff00; padding: 5px; font-family: 'Courier New', monospace; margin: 5px 0;">
-                            <option value="solo">Solo (AI)</option>
-                            <option value="multiplayer">Multiplayer</option>
-                        </select>
+                    <div class="menu-kpis">
+                        <div>WORLD: Procedural</div>
+                        <div>FOCUS: Expansion + Economy + Tactics</div>
+                        <div>HOTKEYS: H Handbook | F Focus | Enter End Turn</div>
                     </div>
-                    <div style="margin-top: 20px;">
-                        <button id="start-btn">Start Game</button>
+                </section>
+
+                <section class="menu-auth">
+                    <div class="menu-tabs">
+                        <button class="menu-tab active" data-auth-tab="login" type="button">Login</button>
+                        <button class="menu-tab" data-auth-tab="register" type="button">Register</button>
+                        <button class="menu-tab" data-auth-tab="guest" type="button">Guest</button>
                     </div>
-                </div>
+
+                    <div id="auth-panel-login" class="auth-panel active">
+                        <div class="menu-row">
+                            <label for="login-username">Username or Email</label>
+                            <input id="login-username" type="text" placeholder="Commander name or email">
+                        </div>
+                        <div class="menu-row">
+                            <label for="login-password">Password</label>
+                            <input id="login-password" type="password" placeholder="Password">
+                        </div>
+                        <button id="login-action-btn" type="button">Login</button>
+                    </div>
+
+                    <div id="auth-panel-register" class="auth-panel">
+                        <div class="menu-row">
+                            <label for="register-email">Email</label>
+                            <input id="register-email" type="email" placeholder="you@example.com">
+                        </div>
+                        <div class="menu-row">
+                            <label for="register-username">Username</label>
+                            <input id="register-username" type="text" placeholder="Create username">
+                        </div>
+                        <div class="menu-row">
+                            <label for="register-password">Password</label>
+                            <input id="register-password" type="password" placeholder="Create password">
+                        </div>
+                        <div class="menu-row">
+                            <label for="register-password-confirm">Confirm Password</label>
+                            <input id="register-password-confirm" type="password" placeholder="Repeat password">
+                        </div>
+                        <button id="register-action-btn" type="button">Create Account</button>
+                    </div>
+
+                    <div id="auth-panel-guest" class="auth-panel">
+                        <div class="menu-row">
+                            <label for="guest-player-name">Guest Name</label>
+                            <input id="guest-player-name" type="text" placeholder="Player" value="Player">
+                        </div>
+                        <button id="guest-action-btn" type="button">Use Guest Profile</button>
+                    </div>
+
+                    <div id="auth-message"></div>
+
+                    <div class="menu-bottom">
+                        <div>Selected Profile: <span id="selected-profile-name">Guest: Player</span></div>
+                        <button id="logout-btn" type="button">Logout Account Session</button>
+                        <div class="menu-row">
+                            <label for="game-mode">Mode</label>
+                            <select id="game-mode">
+                                <option value="solo">Solo (AI)</option>
+                                <option value="multiplayer">Multiplayer</option>
+                            </select>
+                        </div>
+                        <button id="start-btn" type="button">Start Game</button>
+                    </div>
+                </section>
             </div>
         </div>
         <div id="game-container" style="display: none;">

@@ -237,6 +237,20 @@ export class MapCache {
 		return chunk.tiles.find((t) => t.x === x && t.y === y) || null;
 	}
 
+	setTileType(x: number, y: number, type: TileType): boolean {
+		const tile = this.getTile(x, y);
+		if (!tile) return false;
+		tile.type = type;
+		return true;
+	}
+
+	clearTileResourceNode(x: number, y: number): boolean {
+		const tile = this.getTile(x, y);
+		if (!tile) return false;
+		delete tile.resourceNode;
+		return true;
+	}
+
 	/**
 	 * Get all tiles in a rectangular region
 	 */

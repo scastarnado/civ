@@ -4,7 +4,7 @@
  */
 
 import { GameEngine } from '@/core/GameEngine';
-import { Player } from '@/core/types';
+import { Player, TileType } from '@/core/types';
 import { InputHandler } from '@/input/InputHandler';
 import { NetworkClient } from '@/network/NetworkClient';
 import { CanvasRenderer } from '@/render/CanvasRenderer';
@@ -29,6 +29,7 @@ class GameApplication {
 	private currentPlayer: Player | null = null;
 	private selectedUnitId: string | null = null;
 	private resourcePromptUnitId: string | null = null;
+	private mountainPromptUnitId: string | null = null;
 	private lastTurnSignature: string | null = null;
 	private lastBlockedInputMessageAt: number = 0;
 
@@ -44,22 +45,279 @@ class GameApplication {
 	}
 
 	private setupLoginScreen(): void {
-		const startBtn = document.getElementById('start-btn');
-		const playerNameInput = document.getElementById(
-			'player-name',
-		) as HTMLInputElement;
+		const startBtn = document.getElementById('start-btn') as HTMLButtonElement;
+		const logoutBtn = document.getElementById('logout-btn') as HTMLButtonElement;
 		const gameModeSelect = document.getElementById(
 			'game-mode',
 		) as HTMLSelectElement;
+		const authTabs =
+			document.querySelectorAll<HTMLButtonElement>('[data-auth-tab]');
 
-		if (!startBtn || !playerNameInput || !gameModeSelect) {
+		const loginUsername = document.getElementById(
+			'login-username',
+		) as HTMLInputElement;
+		const loginPassword = document.getElementById(
+			'login-password',
+		) as HTMLInputElement;
+		const loginActionBtn = document.getElementById(
+			'login-action-btn',
+		) as HTMLButtonElement;
+
+		const registerUsername = document.getElementById(
+			'register-username',
+		) as HTMLInputElement;
+		const registerEmail = document.getElementById(
+			'register-email',
+		) as HTMLInputElement;
+		const registerPassword = document.getElementById(
+			'register-password',
+		) as HTMLInputElement;
+		const registerPasswordConfirm = document.getElementById(
+			'register-password-confirm',
+		) as HTMLInputElement;
+		const registerActionBtn = document.getElementById(
+			'register-action-btn',
+		) as HTMLButtonElement;
+
+		const guestNameInput = document.getElementById(
+			'guest-player-name',
+		) as HTMLInputElement;
+		const guestActionBtn = document.getElementById(
+			'guest-action-btn',
+		) as HTMLButtonElement;
+
+		const authMessage = document.getElementById('auth-message');
+		const selectedProfile = document.getElementById('selected-profile-name');
+
+		if (
+			!startBtn ||
+			!logoutBtn ||
+			!gameModeSelect ||
+			!loginUsername ||
+			!loginPassword ||
+			!loginActionBtn ||
+			!registerUsername ||
+			!registerEmail ||
+			!registerPassword ||
+			!registerPasswordConfirm ||
+			!registerActionBtn ||
+			!guestNameInput ||
+			!guestActionBtn ||
+			!authMessage ||
+			!selectedProfile
+		) {
 			console.error('Login screen elements not found');
 			return;
 		}
 
-		startBtn.addEventListener('click', () => {
-			const playerName = playerNameInput.value || 'Player';
+		const lastProfileKey = 'civ.lastProfileName';
+
+		let selectedPlayerName = localStorage.getItem(lastProfileKey) || 'Player';
+		let selectedProfileType: 'guest' | 'account' = 'guest';
+		let activeAccountUsername: string | null = null;
+
+		type MeResponse = {
+			ok: boolean;
+			user?: {
+				id: number;
+				username: string;
+				email: string;
+			};
+			error?: string;
+		};
+
+		const postJson = async <TResponse>(
+			url: string,
+			body: Record<string, unknown>,
+		): Promise<TResponse> => {
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify(body),
+			});
+			return (await response.json()) as TResponse;
+		};
+
+		const getJson = async <TResponse>(url: string): Promise<TResponse> => {
+			const response = await fetch(url, {
+				method: 'GET',
+				credentials: 'include',
+			});
+			return (await response.json()) as TResponse;
+		};
+
+		const setMessage = (text: string, isError: boolean = false): void => {
+			authMessage.textContent = text;
+			authMessage.style.color = isError ? '#ff8080' : '#9ef5cf';
+		};
+
+		const updateSelectedProfile = (
+			name: string,
+			type: 'guest' | 'account',
+		): void => {
+			selectedPlayerName = name.trim() || 'Player';
+			selectedProfileType = type;
+			selectedProfile.textContent =
+				type === 'guest' ?
+					`Guest: ${selectedPlayerName}`
+				:	`Account: ${selectedPlayerName}`;
+			startBtn.disabled = selectedPlayerName.length === 0;
+			logoutBtn.disabled = type !== 'account';
+			localStorage.setItem(lastProfileKey, selectedPlayerName);
+		};
+
+		const setActiveTab = (tab: 'login' | 'register' | 'guest'): void => {
+			authTabs.forEach((btn) => {
+				const active = btn.dataset.authTab === tab;
+				btn.classList.toggle('active', active);
+			});
+
+			const panels = ['login', 'register', 'guest'] as const;
+			panels.forEach((panelName) => {
+				const panel = document.getElementById(`auth-panel-${panelName}`);
+				if (!panel) return;
+				panel.classList.toggle('active', panelName === tab);
+			});
+		};
+
+		updateSelectedProfile(selectedPlayerName, selectedProfileType);
+		setActiveTab('guest');
+
+		const syncFromSession = async (): Promise<void> => {
+			try {
+				const me = await getJson<MeResponse>('/api/auth/me');
+				if (me.ok && me.user) {
+					activeAccountUsername = me.user.username;
+					updateSelectedProfile(me.user.username, 'account');
+					setMessage(`Session restored for ${me.user.username}.`);
+				}
+			} catch {
+				// Keep guest mode silently on network/api failures.
+			}
+		};
+
+		void syncFromSession();
+
+		authTabs.forEach((tabBtn) => {
+			tabBtn.addEventListener('click', () => {
+				const target = tabBtn.dataset.authTab as
+					| 'login'
+					| 'register'
+					| 'guest'
+					| undefined;
+				if (!target) return;
+				setActiveTab(target);
+				setMessage('');
+			});
+		});
+
+		loginActionBtn.addEventListener('click', async () => {
+			const username = loginUsername.value.trim();
+			const password = loginPassword.value;
+			if (!username || !password) {
+				setMessage('Enter username and password to login.', true);
+				return;
+			}
+
+			try {
+				const result = await postJson<MeResponse>('/api/auth/login', {
+					identifier: username,
+					password,
+				});
+				if (!result.ok || !result.user) {
+					setMessage(result.error || 'Invalid credentials.', true);
+					return;
+				}
+
+				activeAccountUsername = result.user.username;
+				updateSelectedProfile(result.user.username, 'account');
+				setMessage(`Logged in as ${result.user.username}.`);
+			} catch {
+				setMessage('Login service unavailable. Try again.', true);
+			}
+		});
+
+		registerActionBtn.addEventListener('click', async () => {
+			const email = registerEmail.value.trim();
+			const username = registerUsername.value.trim();
+			const password = registerPassword.value;
+			const confirmPassword = registerPasswordConfirm.value;
+
+			if (!email || !username || !password) {
+				setMessage('Email, username and password are required.', true);
+				return;
+			}
+			if (!email.includes('@')) {
+				setMessage('Please provide a valid email address.', true);
+				return;
+			}
+			if (password !== confirmPassword) {
+				setMessage('Passwords do not match.', true);
+				return;
+			}
+
+			try {
+				const result = await postJson<MeResponse>('/api/auth/register', {
+					email,
+					username,
+					password,
+				});
+				if (!result.ok || !result.user) {
+					setMessage(result.error || 'Could not register account.', true);
+					return;
+				}
+
+				activeAccountUsername = result.user.username;
+				updateSelectedProfile(result.user.username, 'account');
+				setMessage(`Account created for ${result.user.username}.`);
+				registerPassword.value = '';
+				registerPasswordConfirm.value = '';
+			} catch {
+				setMessage('Registration service unavailable. Try again.', true);
+			}
+		});
+
+		guestActionBtn.addEventListener('click', () => {
+			const guestName = guestNameInput.value.trim() || 'Player';
+			activeAccountUsername = null;
+			updateSelectedProfile(guestName, 'guest');
+			setMessage(`Guest profile ready: ${guestName}.`);
+		});
+
+		logoutBtn.addEventListener('click', async () => {
+			try {
+				await postJson<{ ok: boolean; error?: string }>('/api/auth/logout', {});
+				activeAccountUsername = null;
+				updateSelectedProfile(guestNameInput.value.trim() || 'Player', 'guest');
+				setActiveTab('guest');
+				setMessage('Logged out. Guest mode active.');
+			} catch {
+				setMessage('Logout service unavailable.', true);
+			}
+		});
+
+		startBtn.addEventListener('click', async () => {
+			let playerName = selectedPlayerName || 'Player';
 			const gameMode = gameModeSelect.value;
+
+			if (selectedProfileType === 'account') {
+				try {
+					const me = await getJson<MeResponse>('/api/auth/me');
+					if (!me.ok || !me.user) {
+						setMessage('Session expired. Please login again.', true);
+						setActiveTab('login');
+						return;
+					}
+					playerName = me.user.username;
+					activeAccountUsername = me.user.username;
+				} catch {
+					setMessage('Cannot verify session. Check connection.', true);
+					return;
+				}
+			} else if (activeAccountUsername) {
+				playerName = activeAccountUsername;
+			}
 
 			this.startGame(playerName, gameMode === 'multiplayer').catch((err) => {
 				console.error('Failed to start game:', err);
@@ -185,6 +443,10 @@ class GameApplication {
 		if (gameContainer) gameContainer.style.display = 'flex';
 		if (bottomPanel) bottomPanel.style.display = 'block';
 
+		this.ui?.addEvent('Tips: Click your units/cities to select.');
+		this.ui?.addEvent('Use H (or Esc) to open the strategy handbook anytime.');
+		this.ui?.addEvent('Use F to center camera on the selected unit/city.');
+
 		// Start game loop
 		this.startGameLoop();
 	}
@@ -203,8 +465,25 @@ class GameApplication {
 		this.input.onKeyDown('Escape', () => {
 			if (this.ui?.closeActivePanel()) {
 				this.ui.addEvent('Closed panel.');
+				return;
+			}
+
+			this.ui?.toggleTutorialMenu();
+			if (this.ui?.isTutorialMenuOpen()) {
+				this.ui.addEvent('Opened strategy handbook.');
+			} else {
+				this.ui?.addEvent('Closed strategy handbook.');
 			}
 		});
+		this.input.onKeyDown('KeyH', () => {
+			this.ui?.toggleTutorialMenu();
+			if (this.ui?.isTutorialMenuOpen()) {
+				this.ui.addEvent('Opened strategy handbook.');
+			} else {
+				this.ui?.addEvent('Closed strategy handbook.');
+			}
+		});
+		this.input.onKeyDown('KeyF', () => this.focusSelectedEntity());
 
 		// Arrow keys for camera movement
 		this.input.onKeyDown('ArrowUp', () => {
@@ -228,7 +507,7 @@ class GameApplication {
 			}
 
 			if (this.isPlayerActionLocked()) {
-				this.ui?.addEvent('Active gathering in progress. Actions are paused.');
+				this.ui?.addEvent('An active timed action is in progress.');
 				return;
 			}
 
@@ -286,6 +565,28 @@ class GameApplication {
 					if (this.selectedUnitId) {
 						const unit = this.getUnit(this.selectedUnitId);
 						if (unit && unit.movementPoints > 0) {
+							const targetTile = this.gameEngine
+								.getMapCache()
+								.getTile(worldPos.x, worldPos.y);
+							if (
+								targetTile?.type === TileType.MOUNTAIN &&
+								unit.type === 'settler'
+							) {
+								const mountainResult =
+									this.gameEngine.beginMountainDestroyAttempt(
+										this.selectedUnitId,
+										worldPos.x,
+										worldPos.y,
+									);
+								if (mountainResult.ok) {
+									this.ui?.addEvent(mountainResult.message);
+									this.handleMountainDestroyLanding(this.selectedUnitId);
+								} else {
+									this.ui?.addEvent(mountainResult.message);
+								}
+								return;
+							}
+
 							const moved = this.gameEngine.moveUnit(
 								this.selectedUnitId,
 								worldPos.x,
@@ -297,12 +598,71 @@ class GameApplication {
 									`Moved ${unit.type} to (${worldPos.x}, ${worldPos.y})`,
 								);
 								this.handleResourceLanding(this.selectedUnitId);
+							} else {
+								const reason = this.getMoveFailureReason(
+									unit,
+									worldPos.x,
+									worldPos.y,
+								);
+								if (reason) this.ui?.addEvent(reason);
 							}
+						} else if (unit) {
+							this.ui?.addEvent('This unit has no movement points left.');
 						}
 					}
 				}
 			}
 		});
+	}
+
+	private getMoveFailureReason(
+		unit: {
+			id: string;
+			type: string;
+			x: number;
+			y: number;
+			movementPoints: number;
+		},
+		targetX: number,
+		targetY: number,
+	): string | null {
+		if (!this.gameEngine) return null;
+
+		if (targetX === unit.x && targetY === unit.y) {
+			return 'Unit is already on that tile.';
+		}
+
+		const distance = Math.abs(unit.x - targetX) + Math.abs(unit.y - targetY);
+		if (distance > unit.movementPoints) {
+			return `Not enough movement points (${distance} needed).`;
+		}
+
+		const tile = this.gameEngine.getMapCache().getTile(targetX, targetY);
+		if (!tile) {
+			return 'Cannot move there: unknown tile.';
+		}
+
+		if (tile.type === TileType.WATER) {
+			return 'Cannot move into water.';
+		}
+
+		if (tile.type === TileType.MOUNTAIN && unit.type !== 'settler') {
+			return 'Only settlers can enter mountains.';
+		}
+
+		const ownMountainTask = this.gameEngine.getMountainDestroyStatusForUnit(
+			unit.id,
+		);
+		if (ownMountainTask) {
+			return 'This unit is busy with mountain destruction.';
+		}
+
+		const gatherStatus = this.gameEngine.getResourceStatusForUnit(unit.id);
+		if (gatherStatus?.mode === 'active') {
+			return 'This unit is busy with active gathering.';
+		}
+
+		return 'Move blocked.';
 	}
 
 	private setupNetworkHandlers(): void {
@@ -368,6 +728,7 @@ class GameApplication {
 			this.persistence.saveIdleTimestamp();
 		}
 
+		this.updateMountainDestroyUI();
 		this.updateResourceGatherUI();
 	}
 
@@ -400,7 +761,7 @@ class GameApplication {
 			this.showBlockedInputMessage('You can end turn only during your turn.');
 			return;
 		}
-		if (this.isPlayerActionLocked()) {
+		if (this.gameEngine.isPlayerGatherLocked(this.currentPlayer.id)) {
 			this.ui?.addEvent('Cannot end turn during active gathering.');
 			return;
 		}
@@ -499,6 +860,9 @@ class GameApplication {
 					const result = this.gameEngine.startIdleGather(unitId);
 					this.ui.addEvent(result.message);
 				},
+				() => {
+					// Player chose to ignore — dismissed, no gather started
+				},
 			);
 		} else if (status.mode !== 'none') {
 			this.resourcePromptUnitId = null;
@@ -506,9 +870,74 @@ class GameApplication {
 		}
 	}
 
+	private handleMountainDestroyLanding(unitId: string): void {
+		if (!this.gameEngine || !this.ui) return;
+
+		const status = this.gameEngine.getMountainDestroyStatusForUnit(unitId);
+		this.ui.updateMountainDestroyStatus(status);
+
+		if (!status) {
+			this.mountainPromptUnitId = null;
+			return;
+		}
+
+		if (status.mode === 'pending' && this.mountainPromptUnitId !== unitId) {
+			this.mountainPromptUnitId = unitId;
+			this.ui.showMountainDestroyChoice(
+				status,
+				() => {
+					if (!this.gameEngine || !this.ui) return;
+					const result = this.gameEngine.confirmMountainDestroy(unitId);
+					this.ui.addEvent(result.message);
+				},
+				() => {
+					if (!this.gameEngine || !this.ui) return;
+					const result = this.gameEngine.cancelMountainDestroy(unitId);
+					this.ui.addEvent(result.message);
+					this.mountainPromptUnitId = null;
+					this.ui.updateMountainDestroyStatus(null);
+				},
+			);
+		} else if (status.mode !== 'pending') {
+			this.mountainPromptUnitId = null;
+			this.ui.hideMountainDestroyChoice();
+		}
+	}
+
+	private updateMountainDestroyUI(): void {
+		if (!this.gameEngine || !this.ui || !this.selectedUnitId) {
+			this.ui?.updateMountainDestroyStatus(null);
+			return;
+		}
+
+		const status = this.gameEngine.getMountainDestroyStatusForUnit(
+			this.selectedUnitId,
+		);
+		this.ui.updateMountainDestroyStatus(status);
+
+		if (!status) {
+			this.mountainPromptUnitId = null;
+			return;
+		}
+
+		if (status.mode === 'pending') {
+			this.handleMountainDestroyLanding(this.selectedUnitId);
+		} else {
+			this.mountainPromptUnitId = null;
+			this.ui.hideMountainDestroyChoice();
+		}
+	}
+
 	private updateResourceGatherUI(): void {
 		if (!this.gameEngine || !this.ui || !this.selectedUnitId) {
 			this.ui?.updateResourceStatus(null);
+			return;
+		}
+
+		const mountainStatus = this.gameEngine.getMountainDestroyStatusForUnit(
+			this.selectedUnitId,
+		);
+		if (mountainStatus) {
 			return;
 		}
 
@@ -525,7 +954,7 @@ class GameApplication {
 
 	private isPlayerActionLocked(): boolean {
 		if (!this.gameEngine || !this.currentPlayer) return false;
-		return this.gameEngine.isPlayerActionLocked(this.currentPlayer.id);
+		return this.gameEngine.isPlayerGatherLocked(this.currentPlayer.id);
 	}
 
 	private isHumanTurn(): boolean {
@@ -544,6 +973,51 @@ class GameApplication {
 
 		this.lastTurnSignature = signature;
 		this.ui.updateTurn(this.gameEngine.getTurn(), current);
+		if (current.isHuman) {
+			const readyUnits = current.units.filter(
+				(u) => u.movementPoints > 0,
+			).length;
+			this.ui.addEvent(
+				`Your turn: ${readyUnits} unit(s) ready. Press H for handbook, F to focus selection.`,
+			);
+		} else {
+			this.ui.addEvent(`${current.name} (AI) is taking its turn...`);
+		}
+	}
+
+	private focusSelectedEntity(): void {
+		if (!this.renderer || !this.gameEngine || !this.ui) return;
+
+		const selected = this.renderer.getSelectedEntity();
+		if (!selected) {
+			this.ui.addEvent('No selected entity to focus.');
+			return;
+		}
+
+		const gameState = this.gameEngine.getGameState();
+		if (selected.type === 'unit') {
+			for (const player of gameState.players) {
+				const unit = player.units.find((u) => u.id === selected.id);
+				if (unit) {
+					this.renderer.centerCameraOn(unit.x, unit.y);
+					this.ui.addEvent(`Focused camera on ${unit.type}.`);
+					return;
+				}
+			}
+		}
+
+		if (selected.type === 'city') {
+			for (const player of gameState.players) {
+				const city = player.cities.find((c) => c.id === selected.id);
+				if (city) {
+					this.renderer.centerCameraOn(city.x, city.y);
+					this.ui.addEvent(`Focused camera on ${city.name}.`);
+					return;
+				}
+			}
+		}
+
+		this.ui.addEvent('Selected entity is no longer available.');
 	}
 
 	private showBlockedInputMessage(message: string): void {
