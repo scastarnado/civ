@@ -319,6 +319,7 @@ class GameApplication {
         }
         this.aiManager.setTurnResolvedCallback((message) => {
             this.ui?.addEvent(message);
+            this.ui?.pushAITurnIntel(message);
         });
         // Start game
         this.gameEngine.startGame();
@@ -749,10 +750,37 @@ class GameApplication {
         }
         const status = this.gameEngine.getResourceStatusForUnit(this.selectedUnitId);
         this.ui.updateResourceStatus(status);
-        if (status?.mode !== 'none') {
+        if (!this.isHumanTurn()) {
             this.resourcePromptUnitId = null;
             this.ui.hideResourceChoice();
+            return;
         }
+        if (!status) {
+            this.resourcePromptUnitId = null;
+            this.ui.hideResourceChoice();
+            return;
+        }
+        if (status.mode === 'none') {
+            if (this.resourcePromptUnitId !== this.selectedUnitId) {
+                this.resourcePromptUnitId = this.selectedUnitId;
+                this.ui.showResourceChoice(status, () => {
+                    if (!this.gameEngine || !this.ui || !this.selectedUnitId)
+                        return;
+                    const result = this.gameEngine.startActiveGather(this.selectedUnitId);
+                    this.ui.addEvent(result.message);
+                }, () => {
+                    if (!this.gameEngine || !this.ui || !this.selectedUnitId)
+                        return;
+                    const result = this.gameEngine.startIdleGather(this.selectedUnitId);
+                    this.ui.addEvent(result.message);
+                }, () => {
+                    // Player chose to ignore — dismissed, no gather started.
+                });
+            }
+            return;
+        }
+        this.resourcePromptUnitId = null;
+        this.ui.hideResourceChoice();
     }
     isPlayerActionLocked() {
         if (!this.gameEngine || !this.currentPlayer)
@@ -773,6 +801,7 @@ class GameApplication {
             return;
         }
         this.lastTurnSignature = signature;
+        this.updateAIRumorSignals();
         this.ui.updateTurn(this.gameEngine.getTurn(), current);
         if (current.isHuman) {
             const readyUnits = current.units.filter((u) => u.movementPoints > 0).length;
@@ -781,6 +810,66 @@ class GameApplication {
         else {
             this.ui.addEvent(`${current.name} (AI) is taking its turn...`);
         }
+    }
+    updateAIRumorSignals() {
+        if (!this.gameEngine || !this.ui || !this.renderer || !this.currentPlayer) {
+            return;
+        }
+        const gameState = this.gameEngine.getGameState();
+        const anchor = this.currentPlayer.cities[0] || this.currentPlayer.units[0] || null;
+        if (!anchor) {
+            this.ui.setAIRumorLines(['No scouts available for strategic reports.']);
+            this.renderer.setAIRumorHints([]);
+            return;
+        }
+        const turn = this.gameEngine.getTurn();
+        const rumorLines = [];
+        const rumorHints = [];
+        for (const player of gameState.players) {
+            if (!player.isAI)
+                continue;
+            for (const city of player.cities) {
+                const dx = city.x - anchor.x;
+                const dy = city.y - anchor.y;
+                const distance = Math.abs(dx) + Math.abs(dy);
+                const direction = this.getDirectionLabel(dx, dy);
+                const rangeBand = distance <= 20 ? 'near frontier'
+                    : distance <= 45 ? 'mid frontier'
+                        : 'far frontier';
+                rumorLines.push(`- Activity rumored to the ${direction} (${rangeBand}).`);
+                const seed = this.hashSeedFromString(`${city.id}:${turn}`);
+                const offsetX = (seed % 11) - 5;
+                const offsetY = (Math.floor(seed / 11) % 11) - 5;
+                rumorHints.push({
+                    x: city.x + offsetX,
+                    y: city.y + offsetY,
+                    intensity: Math.max(1, Math.min(4, Math.floor(city.population / 3))),
+                });
+            }
+        }
+        const uniqueRumors = Array.from(new Set(rumorLines)).slice(0, 5);
+        this.ui.setAIRumorLines(uniqueRumors.length > 0 ? uniqueRumors : ['No rumors intercepted yet.']);
+        this.renderer.setAIRumorHints(rumorHints);
+    }
+    getDirectionLabel(dx, dy) {
+        const horizontal = dx > 3 ? 'east' : dx < -3 ? 'west' : '';
+        const vertical = dy > 3 ? 'south' : dy < -3 ? 'north' : '';
+        if (horizontal && vertical) {
+            return `${vertical}-${horizontal}`;
+        }
+        if (horizontal)
+            return horizontal;
+        if (vertical)
+            return vertical;
+        return 'central zone';
+    }
+    hashSeedFromString(value) {
+        let hash = 2166136261;
+        for (let i = 0; i < value.length; i++) {
+            hash ^= value.charCodeAt(i);
+            hash = Math.imul(hash, 16777619);
+        }
+        return Math.abs(hash);
     }
     focusSelectedEntity() {
         if (!this.renderer || !this.gameEngine || !this.ui)

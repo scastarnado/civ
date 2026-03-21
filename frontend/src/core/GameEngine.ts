@@ -1069,7 +1069,6 @@ export class GameEngine {
 			if (task.remainingTurns > 0) continue;
 
 			this.mapCache.setTileType(task.x, task.y, TileType.GRASSLAND);
-			this.mapCache.clearTileResourceNode(task.x, task.y);
 			this.mountainDestroyTasks.delete(unitId);
 		}
 	}

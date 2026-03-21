@@ -80,6 +80,8 @@ export class UIManager {
 		| 'economy'
 		| 'upgrades' = 'basics';
 	private turnInfoText: string = 'Turn: 0';
+	private aiRumorLines: string[] = [];
+	private aiIntelFeed: string[] = [];
 	private controlsText: string =
 		'CONTROLS\n- End Turn: Space / Enter\n- Select/Move: Left Click\n- Camera: WASD / Arrows\n- Handbook: H / Esc\n- Focus Selected: F';
 
@@ -523,7 +525,29 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
 			);
 		}
 
-		this.turnInfoText = `TURN\nNumber: ${turn}\nPlayers: ${players.length}\nOrder:\n${lines.join('\n')}`;
+		const rumors =
+			this.aiRumorLines.length > 0 ?
+				this.aiRumorLines.join('\n')
+			:	'No reliable reports yet.';
+		const intel =
+			this.aiIntelFeed.length > 0 ?
+				this.aiIntelFeed.join('\n')
+			:	'No enemy activity reports yet.';
+
+		this.turnInfoText = `TURN\nNumber: ${turn}\nPlayers: ${players.length}\nOrder:\n${lines.join('\n')}\n\nRUMORED SETTLEMENT FRONTS\n${rumors}\n\nENEMY ACTIVITY FEED\n${intel}`;
+		this.renderRightPanelContent();
+	}
+
+	setAIRumorLines(lines: string[]): void {
+		this.aiRumorLines = lines.slice(0, 5);
+		this.renderRightPanelContent();
+	}
+
+	pushAITurnIntel(message: string): void {
+		this.aiIntelFeed.push(`- ${message}`);
+		if (this.aiIntelFeed.length > 6) {
+			this.aiIntelFeed.shift();
+		}
 		this.renderRightPanelContent();
 	}
 

@@ -8,6 +8,16 @@ import { City, Player, Unit, UnitType } from '@/core/types';
 
 export type AIDifficulty = 'easy' | 'medium' | 'hard';
 
+interface AITurnSnapshot {
+	cityCount: number;
+	settlerCount: number;
+	workerCount: number;
+	warriorCount: number;
+	gold: number;
+	food: number;
+	production: number;
+}
+
 /**
  * AI Decision maker
  */
@@ -28,6 +38,7 @@ export class AIPlayer {
 	 */
 	takeTurn(): string {
 		this.actionsPerformed = 0;
+		const before = this.captureSnapshot();
 
 		// Decide based on difficulty profile
 		switch (this.difficulty) {
@@ -42,7 +53,68 @@ export class AIPlayer {
 				break;
 		}
 
-		return `${this.player.name} completed ${this.actionsPerformed} action${this.actionsPerformed === 1 ? '' : 's'}.`;
+		const after = this.captureSnapshot();
+		return this.buildFoggedSummary(before, after);
+	}
+
+	private captureSnapshot(): AITurnSnapshot {
+		const units = this.player.units;
+		return {
+			cityCount: this.player.cities.length,
+			settlerCount: units.filter((u) => u.type === UnitType.SETTLER).length,
+			workerCount: units.filter((u) => u.type === UnitType.WORKER).length,
+			warriorCount: units.filter((u) => u.type === UnitType.WARRIOR).length,
+			gold: this.player.resources.gold,
+			food: this.player.resources.food,
+			production: this.player.resources.production,
+		};
+	}
+
+	private buildFoggedSummary(
+		before: AITurnSnapshot,
+		after: AITurnSnapshot,
+	): string {
+		const signals: string[] = [];
+
+		if (after.cityCount > before.cityCount) {
+			signals.push('frontier claims expanded');
+		}
+		if (after.warriorCount > before.warriorCount) {
+			signals.push('military drills intensified');
+		}
+		if (after.settlerCount > before.settlerCount) {
+			signals.push('migration convoys were sighted');
+		}
+		if (after.workerCount > before.workerCount) {
+			signals.push('labor detachments regrouped');
+		}
+
+		const goldDelta = after.gold - before.gold;
+		const foodDelta = after.food - before.food;
+		const productionDelta = after.production - before.production;
+		if (goldDelta >= 10) {
+			signals.push('trade traffic increased');
+		}
+		if (foodDelta >= 10) {
+			signals.push('supply routes stabilized');
+		}
+		if (productionDelta >= 10) {
+			signals.push('industry output rose');
+		}
+
+		if (signals.length === 0) {
+			signals.push('scouting patterns shifted');
+		}
+
+		let activity = 'low';
+		if (this.actionsPerformed >= 4) {
+			activity = 'high';
+		} else if (this.actionsPerformed >= 2) {
+			activity = 'moderate';
+		}
+
+		const notableSignals = signals.slice(0, 2).join('; ');
+		return `${this.player.name} intel: ${activity} activity, ${notableSignals}.`;
 	}
 
 	/**

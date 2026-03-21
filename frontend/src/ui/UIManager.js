@@ -42,6 +42,8 @@ export class UIManager {
         this.cityOverlayOnClose = null;
         this.tutorialActiveTab = 'basics';
         this.turnInfoText = 'Turn: 0';
+        this.aiRumorLines = [];
+        this.aiIntelFeed = [];
         this.controlsText = 'CONTROLS\n- End Turn: Space / Enter\n- Select/Move: Left Click\n- Camera: WASD / Arrows\n- Handbook: H / Esc\n- Focus Selected: F';
         this.leftPanel = new UIPanel('left-panel');
         this.rightPanel = new UIPanel('right-panel');
@@ -418,7 +420,20 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
                     : `+${offset}`;
             lines.push(`${prefix}: ${player.name}${player.isAI ? ' [AI]' : ' [HUMAN]'}`);
         }
-        this.turnInfoText = `TURN\nNumber: ${turn}\nPlayers: ${players.length}\nOrder:\n${lines.join('\n')}`;
+        const rumors = this.aiRumorLines.length > 0 ? this.aiRumorLines.join('\n') : 'No reliable reports yet.';
+        const intel = this.aiIntelFeed.length > 0 ? this.aiIntelFeed.join('\n') : 'No enemy activity reports yet.';
+        this.turnInfoText = `TURN\nNumber: ${turn}\nPlayers: ${players.length}\nOrder:\n${lines.join('\n')}\n\nRUMORED SETTLEMENT FRONTS\n${rumors}\n\nENEMY ACTIVITY FEED\n${intel}`;
+        this.renderRightPanelContent();
+    }
+    setAIRumorLines(lines) {
+        this.aiRumorLines = lines.slice(0, 5);
+        this.renderRightPanelContent();
+    }
+    pushAITurnIntel(message) {
+        this.aiIntelFeed.push(`- ${message}`);
+        if (this.aiIntelFeed.length > 6) {
+            this.aiIntelFeed.shift();
+        }
         this.renderRightPanelContent();
     }
     /**

@@ -13,6 +13,12 @@ import {
 } from '@/core/types';
 import { MapCache } from '@/map/ChunkSystem';
 
+interface AIRumorHint {
+	x: number;
+	y: number;
+	intensity: number;
+}
+
 export class CanvasRenderer {
 	private canvas: HTMLCanvasElement;
 	private ctx: CanvasRenderingContext2D;
@@ -23,6 +29,7 @@ export class CanvasRenderer {
 	private localPlayerId: string | null = null;
 	private discoveredTiles: Set<string> = new Set();
 	private visibleTiles: Set<string> = new Set();
+	private aiRumorHints: AIRumorHint[] = [];
 	private readonly unitVisionRadius: number = 5;
 	private readonly cityVisionRadius: number = 4;
 
@@ -116,6 +123,8 @@ export class CanvasRenderer {
 				}
 			});
 		});
+
+		this.drawAIRumorHints();
 
 		// Draw selection highlight
 		if (this.selectedEntity) {
@@ -423,6 +432,10 @@ export class CanvasRenderer {
 		this.localPlayerId = playerId;
 	}
 
+	setAIRumorHints(hints: AIRumorHint[]): void {
+		this.aiRumorHints = hints.slice(0, 10);
+	}
+
 	/**
 	 * Get camera position
 	 */
@@ -542,5 +555,32 @@ export class CanvasRenderer {
 		}
 
 		return this.isTileVisible(x, y);
+	}
+
+	private drawAIRumorHints(): void {
+		if (!this.aiRumorHints.length) return;
+
+		this.aiRumorHints.forEach((hint) => {
+			const screenX = (hint.x - this.cameraX) * TILE_SIZE;
+			const screenY = (hint.y - this.cameraY) * TILE_SIZE;
+
+			if (
+				screenX < -TILE_SIZE ||
+				screenX > this.canvas.width ||
+				screenY < -TILE_SIZE ||
+				screenY > this.canvas.height
+			) {
+				return;
+			}
+
+			const glow = 0.14 + Math.min(0.18, hint.intensity * 0.08);
+			this.ctx.fillStyle = '#ffcc66';
+			this.ctx.globalAlpha = glow;
+			this.ctx.fillRect(screenX + 1, screenY + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+			this.ctx.globalAlpha = 0.85;
+			this.ctx.fillStyle = '#ffd98a';
+			this.ctx.fillText('?', screenX + 5, screenY + 2);
+			this.ctx.globalAlpha = 1.0;
+		});
 	}
 }

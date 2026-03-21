@@ -12,6 +12,7 @@ export class CanvasRenderer {
         this.localPlayerId = null;
         this.discoveredTiles = new Set();
         this.visibleTiles = new Set();
+        this.aiRumorHints = [];
         this.unitVisionRadius = 5;
         this.cityVisionRadius = 4;
         // Colors
@@ -88,6 +89,7 @@ export class CanvasRenderer {
                 }
             });
         });
+        this.drawAIRumorHints();
         // Draw selection highlight
         if (this.selectedEntity) {
             this.drawSelectionHighlight();
@@ -329,6 +331,9 @@ export class CanvasRenderer {
         }
         this.localPlayerId = playerId;
     }
+    setAIRumorHints(hints) {
+        this.aiRumorHints = hints.slice(0, 10);
+    }
     /**
      * Get camera position
      */
@@ -433,6 +438,28 @@ export class CanvasRenderer {
             return true;
         }
         return this.isTileVisible(x, y);
+    }
+    drawAIRumorHints() {
+        if (!this.aiRumorHints.length)
+            return;
+        this.aiRumorHints.forEach((hint) => {
+            const screenX = (hint.x - this.cameraX) * TILE_SIZE;
+            const screenY = (hint.y - this.cameraY) * TILE_SIZE;
+            if (screenX < -TILE_SIZE ||
+                screenX > this.canvas.width ||
+                screenY < -TILE_SIZE ||
+                screenY > this.canvas.height) {
+                return;
+            }
+            const glow = 0.14 + Math.min(0.18, hint.intensity * 0.08);
+            this.ctx.fillStyle = '#ffcc66';
+            this.ctx.globalAlpha = glow;
+            this.ctx.fillRect(screenX + 1, screenY + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+            this.ctx.globalAlpha = 0.85;
+            this.ctx.fillStyle = '#ffd98a';
+            this.ctx.fillText('?', screenX + 5, screenY + 2);
+            this.ctx.globalAlpha = 1.0;
+        });
     }
 }
 //# sourceMappingURL=CanvasRenderer.js.map
