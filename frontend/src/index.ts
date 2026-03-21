@@ -46,7 +46,9 @@ class GameApplication {
 
 	private setupLoginScreen(): void {
 		const startBtn = document.getElementById('start-btn') as HTMLButtonElement;
-		const logoutBtn = document.getElementById('logout-btn') as HTMLButtonElement;
+		const logoutBtn = document.getElementById(
+			'logout-btn',
+		) as HTMLButtonElement;
 		const gameModeSelect = document.getElementById(
 			'game-mode',
 		) as HTMLSelectElement;

@@ -57,7 +57,9 @@ export default async function handler(req: Req, res: Res): Promise<void> {
 		`;
 
 		if (existing.length > 0) {
-			res.status(409).json({ ok: false, error: 'Email or username already exists.' });
+			res
+				.status(409)
+				.json({ ok: false, error: 'Email or username already exists.' });
 			return;
 		}
 

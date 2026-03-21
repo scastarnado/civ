@@ -1,5 +1,5 @@
-import { clearSessionCookie } from '../_lib/session';
 import { methodNotAllowed } from '../_lib/request';
+import { clearSessionCookie } from '../_lib/session';
 
 type Req = { method?: string };
 type Res = {

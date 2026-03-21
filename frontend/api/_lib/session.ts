@@ -41,7 +41,10 @@ export async function getSessionUserId(req: AnyReq): Promise<number | null> {
 	}
 }
 
-export async function setSessionCookie(res: AnyRes, userId: number): Promise<void> {
+export async function setSessionCookie(
+	res: AnyRes,
+	userId: number,
+): Promise<void> {
 	const token = await createSessionToken(userId);
 	const cookie = serialize(SESSION_COOKIE_NAME, token, {
 		httpOnly: true,

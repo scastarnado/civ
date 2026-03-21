@@ -31,9 +31,7 @@ export async function readJsonBody<T>(req: AnyReq): Promise<T> {
 			return;
 		}
 		req.on('data', (chunk) => {
-			const normalized = Buffer.isBuffer(chunk)
-				? chunk
-				: Buffer.from(chunk);
+			const normalized = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
 			chunks.push(normalized);
 		});
 		req.on('end', () => {

@@ -109,6 +109,8 @@ export default async function handler(req: Req, res: Res): Promise<void> {
 		});
 	} catch (error) {
 		console.error('Stats endpoint error', error);
-		res.status(500).json({ ok: false, error: 'Failed to handle stats request.' });
+		res
+			.status(500)
+			.json({ ok: false, error: 'Failed to handle stats request.' });
 	}
 }
