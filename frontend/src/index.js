@@ -425,39 +425,86 @@ class GameApplication {
             await this.network.connect(this.multiplayerPlayerId, playerName);
         }
     }
-    async startGame(playerName, isMultiplayer) {
-        const worldSeed = Math.floor(Math.random() * 2147483647);
+    async startGame(playerName, isMultiplayer, options = {}) {
+        const worldSeed = typeof options?.worldSeed === 'number' ?
+            options.worldSeed
+            : Math.floor(Math.random() * 2147483647);
         const gameId = `game-${Date.now()}`;
-        console.log(`Starting game: ${isMultiplayer ? 'Multiplayer' : 'Solo'}`);
         console.log(`World seed: ${worldSeed}`);
         // Initialize core systems
         this.gameEngine = new GameEngine(worldSeed);
         this.persistence = new PersistenceManager(gameId);
         this.aiManager = new AIManager(this.gameEngine);
         // Create human player
-        const humanPlayer = {
-            id: isMultiplayer ?
-                this.multiplayerPlayerId || `player-${Date.now()}`
-                : `player-${Date.now()}`,
-            name: playerName,
-            isAI: false,
-            isHuman: true,
-            resources: { gold: 100, food: 50, production: 25 },
-            units: [],
-            cities: [],
-            techs: [],
-            progression: {
-                unitMovementBonus: 0,
-                visionBonus: 0,
-                attackBonus: 0,
-                defenseBonus: 0,
-                foodMultiplier: 1,
-                productionMultiplier: 1,
-                goldMultiplier: 1,
-            },
-            color: '#00ff00',
+        const defaultProgression = {
+            unitMovementBonus: 0,
+            visionBonus: 0,
+            attackBonus: 0,
+            defenseBonus: 0,
+            foodMultiplier: 1,
+            productionMultiplier: 1,
+            goldMultiplier: 1,
         };
-        this.gameEngine.addPlayer(humanPlayer);
+        let humanPlayer = null;
+        if (isMultiplayer) {
+            const lobbyPlayers = Array.isArray(options?.lobbyPlayers)
+                ? options.lobbyPlayers
+                : [];
+            const localId = this.multiplayerPlayerId || `player-${Date.now()}`;
+            const palette = ['#00ff00', '#ff0000', '#0000ff', '#ffff00'];
+            if (lobbyPlayers.length > 0) {
+                lobbyPlayers.forEach((entry, idx) => {
+                    const playerId = entry?.id || `player-${Date.now()}-${idx}`;
+                    const isLocal = playerId === localId;
+                    const player = {
+                        id: playerId,
+                        name: entry?.name || `Player ${idx + 1}`,
+                        isAI: false,
+                        isHuman: isLocal,
+                        resources: { gold: 100, food: 50, production: 25 },
+                        units: [],
+                        cities: [],
+                        techs: [],
+                        progression: { ...defaultProgression },
+                        color: palette[idx % palette.length],
+                    };
+                    this.gameEngine.addPlayer(player);
+                    if (isLocal) {
+                        humanPlayer = player;
+                    }
+                });
+            }
+            if (!humanPlayer) {
+                humanPlayer = {
+                    id: localId,
+                    name: playerName,
+                    isAI: false,
+                    isHuman: true,
+                    resources: { gold: 100, food: 50, production: 25 },
+                    units: [],
+                    cities: [],
+                    techs: [],
+                    progression: { ...defaultProgression },
+                    color: '#00ff00',
+                };
+                this.gameEngine.addPlayer(humanPlayer);
+            }
+        }
+        else {
+            humanPlayer = {
+                id: `player-${Date.now()}`,
+                name: playerName,
+                isAI: false,
+                isHuman: true,
+                resources: { gold: 100, food: 50, production: 25 },
+                units: [],
+                cities: [],
+                techs: [],
+                progression: { ...defaultProgression },
+                color: '#00ff00',
+            };
+            this.gameEngine.addPlayer(humanPlayer);
+        }
         this.currentPlayer = humanPlayer;
         if (!isMultiplayer) {
             const aiDifficulties = ['easy', 'medium', 'hard'];
@@ -765,7 +812,10 @@ class GameApplication {
             this.isStartingMultiplayerGame = true;
             this.currentLobbyRoomId = payload?.roomId || this.currentLobbyRoomId;
             try {
-                await this.startGame(this.multiplayerPlayerName, true);
+                await this.startGame(this.multiplayerPlayerName, true, {
+                    worldSeed: payload?.worldSeed,
+                    lobbyPlayers: payload?.players,
+                });
             }
             finally {
                 this.isStartingMultiplayerGame = false;
@@ -792,8 +842,11 @@ class GameApplication {
         });
         this.network.on('ERROR', (data) => {
             console.error('Server error:', data);
+            const message = typeof data === 'string' ?
+                data
+                : data?.error || 'Unknown server error';
             if (this.ui) {
-                this.ui.addEvent(`Server error: ${data}`);
+                this.ui.addEvent(`Server error: ${message}`);
             }
         });
     }

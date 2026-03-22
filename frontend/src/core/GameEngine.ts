@@ -1031,13 +1031,14 @@ export class GameEngine {
 			production: 25,
 		};
 
-		// Create initial settler unit
+		// Create initial settler unit at a deterministic spawn so multiplayer clients align
+		const startPosition = this.getStartingPositionForPlayer(player.id);
 		const settler: Unit = {
 			id: this.generateId(),
 			ownerId: player.id,
 			type: UnitType.SETTLER,
-			x: Math.floor(Math.random() * 100),
-			y: Math.floor(Math.random() * 100),
+			x: startPosition.x,
+			y: startPosition.y,
 			health: 10,
 			maxHealth: 10,
 			movementPoints: 2 + player.progression.unitMovementBonus,
@@ -1066,6 +1067,41 @@ export class GameEngine {
 		};
 
 		player.cities.push(city);
+	}
+
+	private getStartingPositionForPlayer(playerId: string): {
+		x: number;
+		y: number;
+	} {
+		const base = this.hashPlayerToInt(playerId);
+		const worldSeed = this.gameState.worldSeed;
+		for (let attempt = 0; attempt < 256; attempt++) {
+			const candidateX = (base + worldSeed + attempt * 17) % 100;
+			const candidateY = ((base >>> 1) + worldSeed + attempt * 29) % 100;
+			const x = candidateX < 0 ? candidateX + 100 : candidateX;
+			const y = candidateY < 0 ? candidateY + 100 : candidateY;
+			const tile = this.mapCache.getTile(x, y);
+			if (!tile) continue;
+			if (tile.type === TileType.WATER || tile.type === TileType.MOUNTAIN) continue;
+			const occupied = this.gameState.players.some((existingPlayer) =>
+				existingPlayer.cities.some(
+					(city) => city.x === x && city.y === y,
+				),
+			);
+			if (!occupied) {
+				return { x, y };
+			}
+		}
+		return { x: Math.abs(base) % 100, y: Math.abs(base >> 3) % 100 };
+	}
+
+	private hashPlayerToInt(playerId: string): number {
+		let hash = 2166136261;
+		for (let i = 0; i < playerId.length; i++) {
+			hash ^= playerId.charCodeAt(i);
+			hash = Math.imul(hash, 16777619);
+		}
+		return hash >>> 0;
 	}
 
 	// ============ Game Loop ============

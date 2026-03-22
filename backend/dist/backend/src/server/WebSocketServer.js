@@ -93,14 +93,22 @@ export class GameServer {
             case 'LOBBY_LEAVE': {
                 if (!session)
                     return session;
-                this.leaveLobby(session.playerId, session.roomId, ws);
+                const fallbackRoom = this.findRoomByPlayerId(session.playerId);
+                const effectiveRoomId = session.roomId || fallbackRoom?.getRoomId() || null;
+                this.leaveLobby(session.playerId, effectiveRoomId, ws);
                 session.roomId = null;
                 return session;
             }
             case 'LOBBY_START_GAME': {
-                if (!session || !session.roomId)
+                if (!session)
                     return session;
-                const room = this.rooms.get(session.roomId);
+                const fallbackRoom = this.findRoomByPlayerId(session.playerId);
+                const effectiveRoomId = session.roomId || fallbackRoom?.getRoomId() || null;
+                if (!effectiveRoomId) {
+                    this.sendError(ws, 'No lobby found for player');
+                    return session;
+                }
+                const room = this.rooms.get(effectiveRoomId);
                 if (!room)
                     return session;
                 if (room.getHostPlayerId() !== session.playerId) {
@@ -111,6 +119,7 @@ export class GameServer {
                     this.sendError(ws, 'Need at least 2 players to start');
                     return session;
                 }
+                session.roomId = effectiveRoomId;
                 return session;
             }
             case 'MOVE_UNIT':
@@ -158,7 +167,7 @@ export class GameServer {
             }
             return {
                 playerId,
-                roomId: existingRoom.isGameRunning() ? existingRoom.getRoomId() : null,
+                roomId: existingRoom.getRoomId(),
             };
         }
         this.sendState(ws, 'HANDSHAKE_ACK', {
@@ -258,7 +267,8 @@ export class GameServer {
             this.sendError(ws, 'Lobby is not available');
             return null;
         }
-        if (room.getPlayerCount() >= this.maxPlayersPerMatch && !room.hasPlayer(playerId)) {
+        if (room.getPlayerCount() >= this.maxPlayersPerMatch &&
+            !room.hasPlayer(playerId)) {
             this.sendError(ws, 'Lobby is full');
             return null;
         }

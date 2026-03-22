@@ -13,6 +13,7 @@ export declare class NetworkClient {
     private reconnectDelay;
     private messageQueue;
     private playerId;
+    private playerName;
     private manualDisconnect;
     constructor(url?: string);
     /**

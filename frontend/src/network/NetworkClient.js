@@ -12,6 +12,7 @@ export class NetworkClient {
         this.reconnectDelay = 1000;
         this.messageQueue = [];
         this.playerId = '';
+        this.playerName = 'Player';
         this.manualDisconnect = false;
         this.url = url;
     }
@@ -22,6 +23,7 @@ export class NetworkClient {
         return new Promise((resolve, reject) => {
             try {
                 this.playerId = playerId;
+                this.playerName = (playerName || this.playerName || 'Player').trim() || 'Player';
                 this.manualDisconnect = false;
                 this.ws = new WebSocket(this.url);
                 this.ws.onopen = () => {
@@ -30,7 +32,7 @@ export class NetworkClient {
                     this.reconnectAttempts = 0;
                     console.log('Connected to server');
                     // Send initial handshake
-                    this.send('HANDSHAKE', { playerId, playerName });
+                    this.send('HANDSHAKE', { playerId, playerName: this.playerName });
                     // Flush message queue
                     this.flushMessageQueue();
                     this.emitConnectionStatus('connected', {
@@ -82,7 +84,7 @@ export class NetworkClient {
         });
         console.log(`Attempting reconnection (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
         setTimeout(() => {
-            this.connect(this.playerId).catch((err) => {
+            this.connect(this.playerId, this.playerName).catch((err) => {
                 console.error('Reconnection failed:', err);
             });
         }, this.reconnectDelay * this.reconnectAttempts);

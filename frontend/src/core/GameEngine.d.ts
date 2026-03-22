@@ -16,6 +16,8 @@ export declare class GameEngine {
     addPlayer(player: Player): void;
     startGame(): void;
     private initializePlayer;
+    private getStartingPositionForPlayer;
+    private hashPlayerToInt;
     /**
      * Main game tick - called each frame
      */

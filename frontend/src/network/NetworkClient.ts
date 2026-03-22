@@ -17,6 +17,7 @@ export class NetworkClient {
 	private reconnectDelay: number = 1000;
 	private messageQueue: NetworkMessage[] = [];
 	private playerId: string = '';
+	private playerName: string = 'Player';
 	private manualDisconnect: boolean = false;
 
 	constructor(url: string = 'ws://localhost:8080') {
@@ -30,6 +31,7 @@ export class NetworkClient {
 		return new Promise((resolve, reject) => {
 			try {
 				this.playerId = playerId;
+				this.playerName = (playerName || this.playerName || 'Player').trim() || 'Player';
 				this.manualDisconnect = false;
 				this.ws = new WebSocket(this.url);
 
@@ -40,7 +42,7 @@ export class NetworkClient {
 					console.log('Connected to server');
 
 					// Send initial handshake
-					this.send('HANDSHAKE', { playerId, playerName });
+					this.send('HANDSHAKE', { playerId, playerName: this.playerName });
 
 					// Flush message queue
 					this.flushMessageQueue();
@@ -102,7 +104,7 @@ export class NetworkClient {
 		);
 
 		setTimeout(() => {
-			this.connect(this.playerId).catch((err) => {
+			this.connect(this.playerId, this.playerName).catch((err) => {
 				console.error('Reconnection failed:', err);
 			});
 		}, this.reconnectDelay * this.reconnectAttempts);

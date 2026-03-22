@@ -252,6 +252,47 @@
             background: rgba(0, 0, 0, 0.2);
         }
 
+        .menu-guide {
+            border: 1px solid var(--hud-green-dim);
+            background: rgba(0, 0, 0, 0.26);
+            padding: 10px;
+            color: #a5f2d1;
+            display: grid;
+            gap: 8px;
+        }
+
+        .menu-guide-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #d9ffeb;
+        }
+
+        .menu-guide-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px;
+        }
+
+        .menu-guide-card {
+            border: 1px solid #17573a;
+            background: #0d1611;
+            padding: 7px;
+            font-size: 11px;
+            line-height: 1.45;
+        }
+
+        .menu-guide-card strong {
+            color: #d9ffeb;
+        }
+
+        .menu-guide-footnote {
+            font-size: 11px;
+            color: #9ef5cf;
+            border-top: 1px solid #155433;
+            padding-top: 6px;
+        }
+
         .menu-auth {
             padding: 18px;
             background: var(--hud-bg);
@@ -407,6 +448,10 @@
                 border-right: none;
                 border-bottom: 1px solid var(--hud-green-dim);
             }
+
+            .menu-guide-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -427,6 +472,25 @@
                         <div>WORLD: Procedural</div>
                         <div>FOCUS: Expansion + Economy + Tactics</div>
                         <div>HOTKEYS: H Handbook | F Focus | Enter End Turn</div>
+                    </div>
+                    <div class="menu-guide">
+                        <div class="menu-guide-title">Perfect Run Reference</div>
+                        <div class="menu-guide-grid">
+                            <div class="menu-guide-card"><strong>Start</strong><br>Settle quickly, scout nearby
+                                resources, and secure safe expansion lanes.</div>
+                            <div class="menu-guide-card"><strong>Maintain & Grow</strong><br>Balance food, production,
+                                and gold while keeping upgrades and city growth continuous.</div>
+                            <div class="menu-guide-card"><strong>Attack</strong><br>Push after power spikes, focus one
+                                target, and convert economy lead into military wins.</div>
+                            <div class="menu-guide-card"><strong>Defend</strong><br>Keep border units ready, protect
+                                gatherers, and hold chokepoints before counterattacking.</div>
+                            <div class="menu-guide-card"><strong>How To Win</strong><br>Outscale rivals, hold key
+                                resource zones, and keep unit + infrastructure tempo all game.</div>
+                            <div class="menu-guide-card"><strong>How To Lose</strong><br>Slow expansion, weak economy
+                                balance, bad timing fights, and undefended cities.</div>
+                        </div>
+                        <div class="menu-guide-footnote">Need this later? During gameplay press <strong>H</strong> and
+                            open the <strong>Perfect Run</strong> tab in the Strategy Handbook.</div>
                     </div>
                 </section>
 

@@ -95,7 +95,8 @@ export class UIManager {
 		| 'map'
 		| 'turns'
 		| 'economy'
-		| 'upgrades' = 'basics';
+		| 'upgrades'
+		| 'perfectRun' = 'basics';
 	private turnInfoText: string = 'Turn: 0';
 	private aiRumorLines: string[] = [];
 	private aiIntelFeed: string[] = [];
@@ -484,12 +485,12 @@ Researched: ${player.techs.length}`;
 
 		const tabRow = document.createElement('div');
 		tabRow.style.display = 'grid';
-		tabRow.style.gridTemplateColumns = 'repeat(5, minmax(0, 1fr))';
+		tabRow.style.gridTemplateColumns = 'repeat(6, minmax(0, 1fr))';
 		tabRow.style.gap = '6px';
 		tabRow.style.marginBottom = '10px';
 
 		const tabs: Array<{
-			key: 'basics' | 'map' | 'turns' | 'economy' | 'upgrades';
+			key: 'basics' | 'map' | 'turns' | 'economy' | 'upgrades' | 'perfectRun';
 			label: string;
 		}> = [
 			{ key: 'basics', label: 'Basics' },
@@ -497,6 +498,7 @@ Researched: ${player.techs.length}`;
 			{ key: 'turns', label: 'Turns & Actions' },
 			{ key: 'economy', label: 'Economy' },
 			{ key: 'upgrades', label: 'Upgrades' },
+			{ key: 'perfectRun', label: 'Perfect Run' },
 		];
 
 		tabs.forEach((tab) => {
@@ -583,6 +585,16 @@ S/W/! Units    Settler / Worker / Warrior</div>
 </div>
 <div style="margin-top:8px;border:1px solid #00aa00;padding:8px;"><strong>City scaling</strong><br>As buildings accumulate, city level and footprint increase, making city presence more visible on the map.</div>
 <div style="margin-top:8px;border:1px solid #00aa00;padding:8px;"><strong>Practical build order</strong><br>Early: Granary/Workshop -> Mid: Logistics + Market -> Late: Metallurgy + Industrialization.</div>`,
+			perfectRun: `<div style="margin-bottom:8px;"><strong>Perfect Run Blueprint</strong><br>Use this as a full reference before and during matches. It covers start, growth, warfare, defense, and endgame outcomes.</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px;">
+<div style="border:1px solid #00aa00;padding:8px;"><strong>1) Start the game correctly (Turns 1-3)</strong><br>- Select a profile on the landing screen and press <strong>Start Game</strong>.<br>- Settle your first city quickly with your Settler.<br>- Scout nearby tiles with Warrior/Worker to reveal resource nodes and chokepoints.<br>- Prioritize safe expansion lanes before rivals claim them.</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>2) Maintain and grow your civilization (Early-Mid)</strong><br>- Keep passive economy stable: food for growth, production for tempo, gold for purchases.<br>- Use idle gathering for steady income, then active gathering for timed spikes.<br>- Open city management often and keep a consistent upgrade pipeline.<br>- Expand with additional cities when your core can still defend itself.</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>3) How to attack effectively</strong><br>- Attack only after a power spike (new combat upgrade, fresh units, or movement advantage).<br>- Focus one target city/unit group at a time instead of splitting damage.<br>- Use terrain and vision to approach from favorable angles.<br>- Convert economic lead into military pressure before opponents catch up.</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>4) How to defend from other civilizations</strong><br>- Keep a standing force near borders and your highest-value cities.<br>- Build defensive tech/buildings early enough to survive sudden rushes.<br>- Protect workers and gatherers; losing economy units slows your whole game plan.<br>- Fall back to defensible lines, then counterattack after enemy momentum stalls.</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>5) How to win</strong><br>- Outscale rivals with stronger economy and upgrade timing.<br>- Keep production cycling so armies and infrastructure both progress.<br>- Win decisive fights around objectives, then press your advantage without overextending.<br>- Maintain map control and deny key resource zones to opponents.</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>6) How to lose (common mistakes)</strong><br>- Delaying first city setup and falling behind on economy.<br>- Overspending on one resource path while ignoring balance.<br>- Fighting too early without upgrades, or too late after rivals spike.<br>- Leaving cities undefended and losing units to poor positioning.</div>
+</div>
+<div style="margin-top:8px;border:1px solid #00aa00;padding:8px;"><strong>Checklist before ending each turn</strong><br>1) Spend available resources efficiently. 2) Move units to useful positions. 3) Confirm city upgrades are queued. 4) Check border safety. 5) End turn only when tempo is maintained.</div>`,
 		};
 
 		this.tutorialContent.innerHTML =

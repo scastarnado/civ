@@ -375,7 +375,7 @@ Researched: ${player.techs.length}`;
         panel.appendChild(titleRow);
         const tabRow = document.createElement('div');
         tabRow.style.display = 'grid';
-        tabRow.style.gridTemplateColumns = 'repeat(5, minmax(0, 1fr))';
+        tabRow.style.gridTemplateColumns = 'repeat(6, minmax(0, 1fr))';
         tabRow.style.gap = '6px';
         tabRow.style.marginBottom = '10px';
         const tabs = [
@@ -384,6 +384,7 @@ Researched: ${player.techs.length}`;
             { key: 'turns', label: 'Turns & Actions' },
             { key: 'economy', label: 'Economy' },
             { key: 'upgrades', label: 'Upgrades' },
+            { key: 'perfectRun', label: 'Perfect Run' },
         ];
         tabs.forEach((tab) => {
             const btn = document.createElement('button');
@@ -464,6 +465,16 @@ S/W/! Units    Settler / Worker / Warrior</div>
 </div>
 <div style="margin-top:8px;border:1px solid #00aa00;padding:8px;"><strong>City scaling</strong><br>As buildings accumulate, city level and footprint increase, making city presence more visible on the map.</div>
 <div style="margin-top:8px;border:1px solid #00aa00;padding:8px;"><strong>Practical build order</strong><br>Early: Granary/Workshop -> Mid: Logistics + Market -> Late: Metallurgy + Industrialization.</div>`,
+            perfectRun: `<div style="margin-bottom:8px;"><strong>Perfect Run Blueprint</strong><br>Use this as a full reference before and during matches. It covers start, growth, warfare, defense, and endgame outcomes.</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px;">
+<div style="border:1px solid #00aa00;padding:8px;"><strong>1) Start the game correctly (Turns 1-3)</strong><br>- Select a profile on the landing screen and press <strong>Start Game</strong>.<br>- Settle your first city quickly with your Settler.<br>- Scout nearby tiles with Warrior/Worker to reveal resource nodes and chokepoints.<br>- Prioritize safe expansion lanes before rivals claim them.</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>2) Maintain and grow your civilization (Early-Mid)</strong><br>- Keep passive economy stable: food for growth, production for tempo, gold for purchases.<br>- Use idle gathering for steady income, then active gathering for timed spikes.<br>- Open city management often and keep a consistent upgrade pipeline.<br>- Expand with additional cities when your core can still defend itself.</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>3) How to attack effectively</strong><br>- Attack only after a power spike (new combat upgrade, fresh units, or movement advantage).<br>- Focus one target city/unit group at a time instead of splitting damage.<br>- Use terrain and vision to approach from favorable angles.<br>- Convert economic lead into military pressure before opponents catch up.</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>4) How to defend from other civilizations</strong><br>- Keep a standing force near borders and your highest-value cities.<br>- Build defensive tech/buildings early enough to survive sudden rushes.<br>- Protect workers and gatherers; losing economy units slows your whole game plan.<br>- Fall back to defensible lines, then counterattack after enemy momentum stalls.</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>5) How to win</strong><br>- Outscale rivals with stronger economy and upgrade timing.<br>- Keep production cycling so armies and infrastructure both progress.<br>- Win decisive fights around objectives, then press your advantage without overextending.<br>- Maintain map control and deny key resource zones to opponents.</div>
+<div style="border:1px solid #00aa00;padding:8px;"><strong>6) How to lose (common mistakes)</strong><br>- Delaying first city setup and falling behind on economy.<br>- Overspending on one resource path while ignoring balance.<br>- Fighting too early without upgrades, or too late after rivals spike.<br>- Leaving cities undefended and losing units to poor positioning.</div>
+</div>
+<div style="margin-top:8px;border:1px solid #00aa00;padding:8px;"><strong>Checklist before ending each turn</strong><br>1) Spend available resources efficiently. 2) Move units to useful positions. 3) Confirm city upgrades are queued. 4) Check border safety. 5) End turn only when tempo is maintained.</div>`,
         };
         this.tutorialContent.innerHTML =
             tabContent[this.tutorialActiveTab] || tabContent.basics;
@@ -719,7 +730,8 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
             webWrap.style.minWidth = '0';
             const skillLayout = document.createElement('div');
             skillLayout.style.display = 'grid';
-            skillLayout.style.gridTemplateColumns = 'minmax(0, 1.7fr) minmax(280px, 0.9fr)';
+            skillLayout.style.gridTemplateColumns =
+                'minmax(0, 1.7fr) minmax(280px, 0.9fr)';
             skillLayout.style.gap = '12px';
             skillLayout.style.alignItems = 'stretch';
             skillLayout.style.marginBottom = '10px';
@@ -804,8 +816,8 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
                     return 0;
                 }
                 const deps = getInternalDeps(option);
-                const depth = deps.length === 0
-                    ? 0
+                const depth = deps.length === 0 ?
+                    0
                     : Math.max(...deps.map((depId) => getDepth(depId))) + 1;
                 depthCache.set(optionId, depth);
                 return depth;
@@ -921,8 +933,7 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
                     .slice()
                     .sort((left, right) => left.name.localeCompare(right.name))
                     .forEach((option, idx) => {
-                    const angle = (Math.PI * 2 * idx) /
-                        Math.max(1, ringOptions.length) -
+                    const angle = (Math.PI * 2 * idx) / Math.max(1, ringOptions.length) -
                         Math.PI / 2 +
                         depth * 0.16;
                     const x = center.x + Math.cos(angle) * radius;
@@ -1009,23 +1020,21 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
                     if (!option)
                         return;
                     const isSelected = optionId === selectedOptionId;
-                    button.style.borderColor = isSelected
-                        ? '#ffe894'
-                        : option.owned
-                            ? '#9bffbc'
-                            : option.lockedByPrerequisite
-                                ? '#55645e'
-                                : !option.canAfford
-                                    ? '#c99a58'
-                                    : '#5bcf8d';
-                    button.style.boxShadow = isSelected
-                        ? '0 0 0 3px rgba(255, 232, 148, 0.2), 0 0 22px rgba(255, 232, 148, 0.28)'
-                        : option.owned
-                            ? '0 0 14px rgba(155, 255, 188, 0.2)'
-                            : '0 0 8px rgba(0, 255, 136, 0.18)';
-                    button.style.transform = isSelected
-                        ? 'translate(-50%, -50%) scale(1.12)'
-                        : 'translate(-50%, -50%) scale(1)';
+                    button.style.borderColor =
+                        isSelected ? '#ffe894'
+                            : option.owned ? '#9bffbc'
+                                : option.lockedByPrerequisite ? '#55645e'
+                                    : !option.canAfford ? '#c99a58'
+                                        : '#5bcf8d';
+                    button.style.boxShadow =
+                        isSelected ?
+                            '0 0 0 3px rgba(255, 232, 148, 0.2), 0 0 22px rgba(255, 232, 148, 0.28)'
+                            : option.owned ? '0 0 14px rgba(155, 255, 188, 0.2)'
+                                : '0 0 8px rgba(0, 255, 136, 0.18)';
+                    button.style.transform =
+                        isSelected ?
+                            'translate(-50%, -50%) scale(1.12)'
+                            : 'translate(-50%, -50%) scale(1)';
                 });
             };
             const renderDetails = () => {
@@ -1080,8 +1089,8 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
                 costRow.style.marginBottom = '8px';
                 costRow.textContent = `Cost: Gold ${option.cost.gold} • Food ${option.cost.food} • Production ${option.cost.production}`;
                 detailPanel.appendChild(costRow);
-                const prereqNames = option.prerequisiteIds.length
-                    ? option.prerequisiteIds.map((prereqId) => optionById.get(prereqId)?.name || prereqId)
+                const prereqNames = option.prerequisiteIds.length ?
+                    option.prerequisiteIds.map((prereqId) => optionById.get(prereqId)?.name || prereqId)
                     : ['City Core'];
                 const prereqRow = document.createElement('div');
                 prereqRow.style.fontSize = '11px';
@@ -1117,7 +1126,9 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
                 // Count how many other nodes depend on this one to determine node prominence
                 const dependentCount = dependentCounts.get(option.id) || 0;
                 // Scale nodes by importance: 54px for hub nodes (3+ dependents), 46px for branch nodes (1-2 dependents), 38px for leaf nodes
-                const nodeSize = dependentCount >= 3 ? 54 : dependentCount >= 1 ? 46 : 38;
+                const nodeSize = dependentCount >= 3 ? 54
+                    : dependentCount >= 1 ? 46
+                        : 38;
                 const node = document.createElement('button');
                 node.type = 'button';
                 node.title = option.name;
