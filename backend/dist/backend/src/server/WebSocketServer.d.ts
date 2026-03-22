@@ -1,42 +1,38 @@
 /**
  * WebSocket Server
- * Manages client connections and message routing
+ * Manages client connections, matchmaking queue, and friend lobbies.
  */
 export declare class GameServer {
     private wss;
     private rooms;
+    private lobbiesByCode;
+    private queue;
     private playerManager;
     private port;
+    private readonly maxPlayersPerMatch;
     private readonly disconnectGraceMs;
+    private readonly playerNames;
     constructor(port?: number);
-    /**
-     * Start server
-     */
     start(): void;
-    /**
-     * Setup connection handlers
-     */
     private setupConnectionHandlers;
-    /**
-     * Handle incoming message
-     */
     private handleMessage;
-    /**
-     * Handle handshake/login
-     */
     private handleHandshake;
+    private handleGameMessage;
+    private handleJoinQueue;
+    private createMatchRoom;
+    private createLobbyForHost;
+    private joinLobbyByCode;
+    private leaveLobby;
+    private handleDisconnect;
+    private removeFromQueue;
+    private leaveNonRunningLobbyIfAny;
+    private closeLobbyRoom;
+    private broadcastLobbyUpdate;
+    private broadcastQueueSize;
     private findRoomByPlayerId;
-    /**
-     * Send message to client
-     */
+    private generateLobbyCode;
     private sendState;
-    /**
-     * Send error to client
-     */
     private sendError;
-    /**
-     * Stop server
-     */
     stop(): void;
 }
 //# sourceMappingURL=WebSocketServer.d.ts.map

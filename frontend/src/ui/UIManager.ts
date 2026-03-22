@@ -13,6 +13,23 @@ import {
 	Unit,
 } from '@/core/types';
 
+export interface GameSettings {
+	masterVolume: number;
+	sfxEnabled: boolean;
+	showGrid: boolean;
+	showFPS: boolean;
+	confirmEndTurn: boolean;
+}
+
+const SETTINGS_KEY = 'civ.settings';
+const DEFAULT_SETTINGS: GameSettings = {
+	masterVolume: 70,
+	sfxEnabled: true,
+	showGrid: true,
+	showFPS: false,
+	confirmEndTurn: false,
+};
+
 export class UIPanel {
 	private container: HTMLElement;
 
@@ -83,7 +100,11 @@ export class UIManager {
 	private aiRumorLines: string[] = [];
 	private aiIntelFeed: string[] = [];
 	private controlsText: string =
-		'CONTROLS\n- End Turn: Space / Enter\n- Select/Move: Left Click\n- Camera: WASD / Arrows\n- Handbook: H / Esc\n- Focus Selected: F';
+		'CONTROLS\n- End Turn: Space / Enter\n- Select/Move: Left Click\n- Camera: WASD / Arrows\n- Game Menu: Esc\n- Handbook: H\n- Focus Selected: F';
+	private pauseMenuOverlay!: HTMLDivElement;
+	private settings: GameSettings = { ...DEFAULT_SETTINGS };
+	onLeaveGame: (() => void) | null = null;
+	onSettingsChange: ((settings: GameSettings) => void) | null = null;
 
 	constructor() {
 		this.leftPanel = new UIPanel('left-panel');
@@ -110,6 +131,9 @@ export class UIManager {
 		}
 		this.rightPanelContent = rightContent;
 		this.setupRightPanelTabs();
+		this.settings = this.loadSettings();
+		const pauseMenu = this.createPauseMenuOverlay();
+		this.pauseMenuOverlay = pauseMenu.overlay;
 	}
 
 	private setupRightPanelTabs(): void {
@@ -873,6 +897,11 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
 	}
 
 	closeActivePanel(): boolean {
+		if (this.pauseMenuOverlay.style.display !== 'none') {
+			this.hidePauseMenu();
+			return true;
+		}
+
 		if (this.cityOverlay.style.display !== 'none') {
 			this.hideCityManagement(true);
 			return true;
@@ -944,5 +973,387 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
 		this.resourceProgressFillA.style.width = `${Math.floor(status.progress * 100)}%`;
 		this.resourceProgressFillB.style.width = `${Math.floor((turnsDone / status.totalTurns) * 100)}%`;
 		this.resourceProgressOverlay.style.display = 'block';
+	}
+
+	// ─── Pause / Game Menu ────────────────────────────────────────────────────
+
+	private createPauseMenuOverlay(): {
+		overlay: HTMLDivElement;
+		tabContent: HTMLDivElement;
+	} {
+		const overlay = document.createElement('div');
+		overlay.style.position = 'fixed';
+		overlay.style.inset = '0';
+		overlay.style.background = 'rgba(0, 0, 0, 0.82)';
+		overlay.style.display = 'none';
+		overlay.style.zIndex = '35';
+
+		const panel = document.createElement('div');
+		panel.style.position = 'absolute';
+		panel.style.left = '50%';
+		panel.style.top = '50%';
+		panel.style.transform = 'translate(-50%, -50%)';
+		panel.style.width = 'min(420px, 94vw)';
+		panel.style.background = '#0f0f0f';
+		panel.style.border = '2px solid #00ff00';
+		panel.style.padding = '16px';
+		overlay.appendChild(panel);
+
+		const titleRow = document.createElement('div');
+		titleRow.style.display = 'flex';
+		titleRow.style.justifyContent = 'space-between';
+		titleRow.style.alignItems = 'center';
+		titleRow.style.marginBottom = '12px';
+
+		const title = document.createElement('div');
+		title.textContent = 'GAME MENU';
+		title.style.fontWeight = 'bold';
+		title.style.fontSize = '16px';
+		titleRow.appendChild(title);
+
+		const closeBtn = document.createElement('button');
+		closeBtn.textContent = 'Resume (Esc)';
+		closeBtn.addEventListener('click', () => this.hidePauseMenu());
+		titleRow.appendChild(closeBtn);
+		panel.appendChild(titleRow);
+
+		const tabBar = document.createElement('div');
+		tabBar.style.display = 'grid';
+		tabBar.style.gridTemplateColumns = 'repeat(2, 1fr)';
+		tabBar.style.gap = '6px';
+		tabBar.style.marginBottom = '12px';
+		panel.appendChild(tabBar);
+
+		const tabContent = document.createElement('div');
+		panel.appendChild(tabContent);
+
+		const tabBtns: Record<string, HTMLButtonElement> = {};
+
+		const renderTab = (tab: 'menu' | 'settings') => {
+			Object.entries(tabBtns).forEach(([key, btn]) => {
+				btn.style.backgroundColor = key === tab ? '#006600' : '#003300';
+				btn.style.borderColor = key === tab ? '#aaffaa' : '#00ff00';
+			});
+			if (tab === 'menu') {
+				this.renderPauseMenuMain(tabContent);
+			} else {
+				this.renderPauseMenuSettings(tabContent);
+			}
+		};
+
+		const tabDefs: Array<{ key: 'menu' | 'settings'; label: string }> = [
+			{ key: 'menu', label: 'Menu' },
+			{ key: 'settings', label: 'Settings' },
+		];
+
+		tabDefs.forEach(({ key, label }) => {
+			const btn = document.createElement('button');
+			btn.textContent = label;
+			btn.style.width = '100%';
+			btn.style.padding = '6px';
+			btn.style.margin = '0';
+			btn.addEventListener('click', () => renderTab(key));
+			tabBtns[key] = btn;
+			tabBar.appendChild(btn);
+		});
+
+		renderTab('menu');
+
+		// Store renderTab so showPauseMenu() can reset to main tab
+		(
+			overlay as HTMLDivElement & {
+				_renderTab?: (t: 'menu' | 'settings') => void;
+			}
+		)._renderTab = renderTab;
+
+		overlay.addEventListener('click', (event) => {
+			if (event.target === overlay) this.hidePauseMenu();
+		});
+
+		document.body.appendChild(overlay);
+		return { overlay, tabContent };
+	}
+
+	private renderPauseMenuMain(container: HTMLDivElement): void {
+		container.innerHTML = '';
+
+		const resumeBtn = document.createElement('button');
+		resumeBtn.textContent = 'Resume Game';
+		resumeBtn.style.width = '100%';
+		resumeBtn.style.padding = '10px';
+		resumeBtn.style.marginBottom = '8px';
+		resumeBtn.style.fontSize = '14px';
+		resumeBtn.addEventListener('click', () => this.hidePauseMenu());
+		container.appendChild(resumeBtn);
+
+		const handbookBtn = document.createElement('button');
+		handbookBtn.textContent = 'Strategy Handbook (H)';
+		handbookBtn.style.width = '100%';
+		handbookBtn.style.padding = '8px';
+		handbookBtn.style.marginBottom = '16px';
+		handbookBtn.addEventListener('click', () => {
+			this.hidePauseMenu();
+			this.showTutorialMenu();
+		});
+		container.appendChild(handbookBtn);
+
+		const dangerZone = document.createElement('div');
+		dangerZone.style.borderTop = '1px solid #330000';
+		dangerZone.style.paddingTop = '12px';
+
+		const dangerLabel = document.createElement('div');
+		dangerLabel.textContent = '— DANGER ZONE —';
+		dangerLabel.style.color = '#ff4444';
+		dangerLabel.style.fontSize = '11px';
+		dangerLabel.style.textAlign = 'center';
+		dangerLabel.style.letterSpacing = '1px';
+		dangerLabel.style.marginBottom = '10px';
+		dangerZone.appendChild(dangerLabel);
+
+		const leaveBtn = document.createElement('button');
+		leaveBtn.textContent = 'Leave Game';
+		leaveBtn.style.width = '100%';
+		leaveBtn.style.padding = '8px';
+		leaveBtn.style.borderColor = '#ff4444';
+		leaveBtn.style.color = '#ff4444';
+		leaveBtn.style.backgroundColor = '#1a0000';
+		leaveBtn.addEventListener('click', () =>
+			this.renderLeaveConfirm(container),
+		);
+		dangerZone.appendChild(leaveBtn);
+
+		container.appendChild(dangerZone);
+	}
+
+	private renderLeaveConfirm(container: HTMLDivElement): void {
+		container.innerHTML = '';
+
+		const warning = document.createElement('div');
+		warning.style.border = '1px solid #ff4444';
+		warning.style.padding = '12px';
+		warning.style.marginBottom = '12px';
+		warning.style.color = '#ff8888';
+		warning.style.lineHeight = '1.6';
+		warning.innerHTML =
+			`<strong style="color:#ff4444;font-size:14px;">⚠ Leave Game?</strong><br><br>` +
+			`Leaving an active game counts as a <strong>forfeit</strong>. ` +
+			`In ranked play this will negatively affect your matchmaking score ` +
+			`and may result in a temporary queue penalty.<br><br>` +
+			`Your current progress will not be saved as a victory.`;
+		container.appendChild(warning);
+
+		const confirmBtn = document.createElement('button');
+		confirmBtn.textContent = 'Confirm — Forfeit & Leave';
+		confirmBtn.style.width = '100%';
+		confirmBtn.style.padding = '8px';
+		confirmBtn.style.marginBottom = '8px';
+		confirmBtn.style.borderColor = '#ff4444';
+		confirmBtn.style.color = '#ff4444';
+		confirmBtn.style.backgroundColor = '#1a0000';
+		confirmBtn.addEventListener('click', () => {
+			this.hidePauseMenu();
+			if (this.onLeaveGame) this.onLeaveGame();
+		});
+		container.appendChild(confirmBtn);
+
+		const cancelBtn = document.createElement('button');
+		cancelBtn.textContent = 'Cancel — Keep Playing';
+		cancelBtn.style.width = '100%';
+		cancelBtn.style.padding = '8px';
+		cancelBtn.addEventListener('click', () =>
+			this.renderPauseMenuMain(container),
+		);
+		container.appendChild(cancelBtn);
+	}
+
+	private renderPauseMenuSettings(container: HTMLDivElement): void {
+		container.innerHTML = '';
+
+		const makeSectionHeader = (text: string): HTMLDivElement => {
+			const d = document.createElement('div');
+			d.textContent = text;
+			d.style.color = '#aaffaa';
+			d.style.fontSize = '11px';
+			d.style.fontWeight = 'bold';
+			d.style.letterSpacing = '1px';
+			d.style.marginTop = '12px';
+			d.style.marginBottom = '6px';
+			d.style.borderBottom = '1px solid #005500';
+			d.style.paddingBottom = '2px';
+			return d;
+		};
+
+		const makeRow = (label: string, control: HTMLElement): HTMLDivElement => {
+			const row = document.createElement('div');
+			row.style.display = 'flex';
+			row.style.justifyContent = 'space-between';
+			row.style.alignItems = 'center';
+			row.style.marginBottom = '8px';
+			const labelEl = document.createElement('div');
+			labelEl.textContent = label;
+			row.appendChild(labelEl);
+			row.appendChild(control);
+			return row;
+		};
+
+		const makeToggle = (
+			value: boolean,
+			onChange: (v: boolean) => void,
+		): HTMLButtonElement => {
+			const btn = document.createElement('button');
+			const update = (v: boolean) => {
+				btn.textContent = v ? 'ON' : 'OFF';
+				btn.style.backgroundColor = v ? '#006600' : '#330000';
+				btn.style.borderColor = v ? '#aaffaa' : '#aa0000';
+				btn.style.color = v ? '#aaffaa' : '#ff8888';
+				btn.style.minWidth = '50px';
+				btn.style.padding = '3px 8px';
+			};
+			let current = value;
+			update(current);
+			btn.addEventListener('click', () => {
+				current = !current;
+				update(current);
+				onChange(current);
+			});
+			return btn;
+		};
+
+		const makeSlider = (
+			value: number,
+			onChange: (v: number) => void,
+		): HTMLDivElement => {
+			const wrapper = document.createElement('div');
+			wrapper.style.display = 'flex';
+			wrapper.style.alignItems = 'center';
+			wrapper.style.gap = '8px';
+
+			const input = document.createElement('input');
+			input.type = 'range';
+			input.min = '0';
+			input.max = '100';
+			input.value = String(value);
+			input.style.width = '110px';
+			input.style.accentColor = '#00ff00';
+
+			const valueLabel = document.createElement('div');
+			valueLabel.textContent = `${value}%`;
+			valueLabel.style.minWidth = '36px';
+			valueLabel.style.textAlign = 'right';
+
+			input.addEventListener('input', () => {
+				const v = parseInt(input.value, 10);
+				valueLabel.textContent = `${v}%`;
+				onChange(v);
+			});
+
+			wrapper.appendChild(input);
+			wrapper.appendChild(valueLabel);
+			return wrapper;
+		};
+
+		// ── Audio ────────────────────────────────────────────────────────────
+		container.appendChild(makeSectionHeader('AUDIO'));
+
+		container.appendChild(
+			makeRow(
+				'Master Volume',
+				makeSlider(this.settings.masterVolume, (v) => {
+					this.settings.masterVolume = v;
+					this.saveSettings();
+					this.onSettingsChange?.(this.getSettings());
+				}),
+			),
+		);
+
+		container.appendChild(
+			makeRow(
+				'Sound Effects',
+				makeToggle(this.settings.sfxEnabled, (v) => {
+					this.settings.sfxEnabled = v;
+					this.saveSettings();
+					this.onSettingsChange?.(this.getSettings());
+				}),
+			),
+		);
+
+		// ── Display ──────────────────────────────────────────────────────────
+		container.appendChild(makeSectionHeader('DISPLAY'));
+
+		container.appendChild(
+			makeRow(
+				'Show Grid Lines',
+				makeToggle(this.settings.showGrid, (v) => {
+					this.settings.showGrid = v;
+					this.saveSettings();
+					this.onSettingsChange?.(this.getSettings());
+				}),
+			),
+		);
+
+		container.appendChild(
+			makeRow(
+				'Show FPS Counter',
+				makeToggle(this.settings.showFPS, (v) => {
+					this.settings.showFPS = v;
+					this.saveSettings();
+					this.onSettingsChange?.(this.getSettings());
+				}),
+			),
+		);
+
+		// ── Gameplay ─────────────────────────────────────────────────────────
+		container.appendChild(makeSectionHeader('GAMEPLAY'));
+
+		container.appendChild(
+			makeRow(
+				'Confirm End Turn',
+				makeToggle(this.settings.confirmEndTurn, (v) => {
+					this.settings.confirmEndTurn = v;
+					this.saveSettings();
+					this.onSettingsChange?.(this.getSettings());
+				}),
+			),
+		);
+	}
+
+	showPauseMenu(): void {
+		this.pauseMenuOverlay.style.display = 'block';
+		const typed = this.pauseMenuOverlay as HTMLDivElement & {
+			_renderTab?: (t: 'menu' | 'settings') => void;
+		};
+		typed._renderTab?.('menu');
+	}
+
+	hidePauseMenu(): void {
+		this.pauseMenuOverlay.style.display = 'none';
+	}
+
+	isPauseMenuOpen(): boolean {
+		return this.pauseMenuOverlay.style.display !== 'none';
+	}
+
+	getSettings(): GameSettings {
+		return { ...this.settings };
+	}
+
+	private loadSettings(): GameSettings {
+		try {
+			const raw = localStorage.getItem(SETTINGS_KEY);
+			if (raw) {
+				return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+			}
+		} catch {
+			// ignore malformed data
+		}
+		return { ...DEFAULT_SETTINGS };
+	}
+
+	private saveSettings(): void {
+		try {
+			localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
+		} catch {
+			// ignore quota errors
+		}
 	}
 }

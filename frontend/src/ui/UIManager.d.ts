@@ -3,6 +3,13 @@
  * Manages UI panels, resources display, and event log
  */
 import { City, CityManagementData, MountainDestroyStatus, Player, ResourceNodeStatus, Unit } from '@/core/types';
+export interface GameSettings {
+    masterVolume: number;
+    sfxEnabled: boolean;
+    showGrid: boolean;
+    showFPS: boolean;
+    confirmEndTurn: boolean;
+}
 export declare class UIPanel {
     private container;
     constructor(elementId: string);
@@ -46,6 +53,10 @@ export declare class UIManager {
     private aiRumorLines;
     private aiIntelFeed;
     private controlsText;
+    private pauseMenuOverlay;
+    private settings;
+    onLeaveGame: (() => void) | null;
+    onSettingsChange: ((settings: GameSettings) => void) | null;
     constructor();
     private setupRightPanelTabs;
     private refreshRightPanelTabStyles;
@@ -104,5 +115,15 @@ export declare class UIManager {
     closeActivePanel(): boolean;
     updateResourceStatus(status: ResourceNodeStatus | null): void;
     updateMountainDestroyStatus(status: MountainDestroyStatus | null): void;
+    private createPauseMenuOverlay;
+    private renderPauseMenuMain;
+    private renderLeaveConfirm;
+    private renderPauseMenuSettings;
+    showPauseMenu(): void;
+    hidePauseMenu(): void;
+    isPauseMenuOpen(): boolean;
+    getSettings(): GameSettings;
+    private loadSettings;
+    private saveSettings;
 }
 //# sourceMappingURL=UIManager.d.ts.map

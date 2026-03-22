@@ -250,6 +250,59 @@
             gap: 8px;
         }
 
+        .mp-choice-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px;
+        }
+
+        .mp-choice-btn {
+            margin: 0;
+            width: 100%;
+            border-color: var(--hud-green-dim);
+            color: #9ef5cf;
+            background: #0d2a19;
+        }
+
+        .mp-choice-btn.active {
+            border-color: var(--hud-border);
+            color: #d9ffeb;
+            background: #0f5b34;
+        }
+
+        .mp-section {
+            border: 1px solid var(--hud-green-dim);
+            background: #111811;
+            padding: 10px;
+            display: none;
+            gap: 8px;
+        }
+
+        .mp-section.active {
+            display: grid;
+        }
+
+        .lobby-code {
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            color: #d9ffeb;
+            padding: 6px 8px;
+            border: 1px dashed #1eff95;
+            background: #0d1510;
+            text-align: center;
+        }
+
+        .lobby-players {
+            border: 1px solid #155433;
+            min-height: 84px;
+            background: #0b120e;
+            padding: 6px;
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
         #auth-message {
             min-height: 18px;
             font-size: 12px;
@@ -353,6 +406,41 @@
                                 <option value="solo">Solo (AI)</option>
                                 <option value="multiplayer">Multiplayer</option>
                             </select>
+                        </div>
+                        <div id="multiplayer-options" class="menu-row" style="display: none;">
+                            <label>Multiplayer Type</label>
+                            <div class="mp-choice-grid">
+                                <button id="mp-mode-search" class="mp-choice-btn active" type="button">Search
+                                    Game</button>
+                                <button id="mp-mode-friends" class="mp-choice-btn" type="button">Play With
+                                    Friends</button>
+                            </div>
+
+                            <div id="mp-section-search" class="mp-section active">
+                                <div style="font-size: 12px; color: #9ef5cf;">Join queue and start automatically when 4
+                                    players are ready.</div>
+                                <button id="mp-queue-btn" type="button">Search Match</button>
+                                <button id="mp-queue-cancel-btn" type="button">Leave Queue</button>
+                                <div id="mp-queue-status" style="font-size: 12px; color: #9ef5cf;">Not queued.</div>
+                            </div>
+
+                            <div id="mp-section-friends" class="mp-section">
+                                <button id="mp-host-btn" type="button">Host Lobby</button>
+                                <div class="menu-row">
+                                    <label for="mp-join-code">Join Lobby Code</label>
+                                    <input id="mp-join-code" type="text" maxlength="6" placeholder="ABC123">
+                                </div>
+                                <button id="mp-join-btn" type="button">Join Lobby</button>
+                            </div>
+
+                            <div id="mp-lobby-panel" class="mp-section">
+                                <div style="font-size: 12px; color: #9ef5cf;">Lobby Code</div>
+                                <div id="mp-lobby-code" class="lobby-code">------</div>
+                                <div style="font-size: 12px; color: #9ef5cf;">Connected Players</div>
+                                <div id="mp-lobby-players" class="lobby-players">No players yet.</div>
+                                <button id="mp-lobby-start-btn" type="button">Start Lobby Game</button>
+                                <button id="mp-lobby-leave-btn" type="button">Leave Lobby</button>
+                            </div>
                         </div>
                         <button id="start-btn" type="button">Start Game</button>
                     </div>

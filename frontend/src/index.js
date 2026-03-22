@@ -2,6 +2,7 @@
  * Frontend Main Entry Point
  * Initializes game and connects all systems
  */
+// @ts-nocheck
 import { GameEngine } from '@/core/GameEngine';
 import { TileType } from '@/core/types';
 import { InputHandler } from '@/input/InputHandler';
@@ -31,12 +32,24 @@ class GameApplication {
         this.lastBlockedInputMessageAt = 0;
         this.lastAutosaveAt = 0;
         this.autosaveIntervalMs = 15000;
+        this.confirmEndTurnEnabled = false;
+        this.networkHandlersBound = false;
+        this.multiplayerPlayerId = null;
+        this.multiplayerPlayerName = null;
+        this.currentLobbyRoomId = null;
+        this.currentLobbyCode = null;
+        this.isStartingMultiplayerGame = false;
     }
     async initialize() {
         console.log('Initializing 4X Strategy Game...');
         // Initialize UI
         this.ui = new UIManager();
         this.ui.addEvent('Welcome to 4X Strategy Game!');
+        // Apply saved settings immediately
+        this.applySettings(this.ui.getSettings());
+        // Wire pause menu callbacks
+        this.ui.onLeaveGame = () => this.leaveGame();
+        this.ui.onSettingsChange = (s) => this.applySettings(s);
         // Setup event listeners
         this.setupLoginScreen();
     }
@@ -57,6 +70,22 @@ class GameApplication {
         const guestActionBtn = document.getElementById('guest-action-btn');
         const authMessage = document.getElementById('auth-message');
         const selectedProfile = document.getElementById('selected-profile-name');
+        const multiplayerOptions = document.getElementById('multiplayer-options');
+        const mpModeSearchBtn = document.getElementById('mp-mode-search');
+        const mpModeFriendsBtn = document.getElementById('mp-mode-friends');
+        const mpSectionSearch = document.getElementById('mp-section-search');
+        const mpSectionFriends = document.getElementById('mp-section-friends');
+        const mpQueueBtn = document.getElementById('mp-queue-btn');
+        const mpQueueCancelBtn = document.getElementById('mp-queue-cancel-btn');
+        const mpQueueStatus = document.getElementById('mp-queue-status');
+        const mpHostBtn = document.getElementById('mp-host-btn');
+        const mpJoinCodeInput = document.getElementById('mp-join-code');
+        const mpJoinBtn = document.getElementById('mp-join-btn');
+        const mpLobbyPanel = document.getElementById('mp-lobby-panel');
+        const mpLobbyCode = document.getElementById('mp-lobby-code');
+        const mpLobbyPlayers = document.getElementById('mp-lobby-players');
+        const mpLobbyStartBtn = document.getElementById('mp-lobby-start-btn');
+        const mpLobbyLeaveBtn = document.getElementById('mp-lobby-leave-btn');
         if (!startBtn ||
             !logoutBtn ||
             !gameModeSelect ||
@@ -71,7 +100,23 @@ class GameApplication {
             !guestNameInput ||
             !guestActionBtn ||
             !authMessage ||
-            !selectedProfile) {
+            !selectedProfile ||
+            !multiplayerOptions ||
+            !mpModeSearchBtn ||
+            !mpModeFriendsBtn ||
+            !mpSectionSearch ||
+            !mpSectionFriends ||
+            !mpQueueBtn ||
+            !mpQueueCancelBtn ||
+            !mpQueueStatus ||
+            !mpHostBtn ||
+            !mpJoinCodeInput ||
+            !mpJoinBtn ||
+            !mpLobbyPanel ||
+            !mpLobbyCode ||
+            !mpLobbyPlayers ||
+            !mpLobbyStartBtn ||
+            !mpLobbyLeaveBtn) {
             console.error('Login screen elements not found');
             return;
         }
@@ -79,6 +124,7 @@ class GameApplication {
         let selectedPlayerName = localStorage.getItem(lastProfileKey) || 'Player';
         let selectedProfileType = 'guest';
         let activeAccountUsername = null;
+        let multiplayerChoice = 'search';
         const postJson = async (url, body) => {
             const response = await fetch(url, {
                 method: 'POST',
@@ -123,8 +169,57 @@ class GameApplication {
                 panel.classList.toggle('active', panelName === tab);
             });
         };
+        const setMultiplayerChoice = (choice) => {
+            multiplayerChoice = choice;
+            mpModeSearchBtn.classList.toggle('active', choice === 'search');
+            mpModeFriendsBtn.classList.toggle('active', choice === 'friends');
+            mpSectionSearch.classList.toggle('active', choice === 'search');
+            mpSectionFriends.classList.toggle('active', choice === 'friends');
+        };
+        const updateModeUI = () => {
+            const isMultiplayer = gameModeSelect.value === 'multiplayer';
+            multiplayerOptions.style.display = isMultiplayer ? 'grid' : 'none';
+            startBtn.style.display = isMultiplayer ? 'none' : 'block';
+        };
+        const resolveProfileName = async () => {
+            let playerName = selectedPlayerName || 'Player';
+            if (selectedProfileType === 'account') {
+                try {
+                    const me = await getJson('/api/auth/me');
+                    if (!me.ok || !me.user) {
+                        setMessage('Session expired. Please login again.', true);
+                        setActiveTab('login');
+                        return null;
+                    }
+                    playerName = me.user.username;
+                    activeAccountUsername = me.user.username;
+                }
+                catch {
+                    setMessage('Cannot verify session. Check connection.', true);
+                    return null;
+                }
+            }
+            else if (activeAccountUsername) {
+                playerName = activeAccountUsername;
+            }
+            return playerName;
+        };
+        const renderLobby = (payload) => {
+            mpLobbyPanel.classList.add('active');
+            mpLobbyCode.textContent = payload.lobbyCode || '------';
+            const rows = (payload.players || []).map((player) => {
+                const isHost = player.id === payload.hostPlayerId;
+                const status = player.connected === false ? ' (reconnecting)' : '';
+                return `${isHost ? '[HOST] ' : ''}${player.name || player.id}${status}`;
+            });
+            mpLobbyPlayers.textContent = rows.length > 0 ? rows.join('\n') : 'No players yet.';
+            mpLobbyStartBtn.style.display =
+                payload.hostPlayerId === this.multiplayerPlayerId ? 'block' : 'none';
+        };
         updateSelectedProfile(selectedPlayerName, selectedProfileType);
         setActiveTab('guest');
+        setMultiplayerChoice(multiplayerChoice);
+        updateModeUI();
         const syncFromSession = async () => {
             try {
                 const me = await getJson('/api/auth/me');
@@ -148,6 +243,17 @@ class GameApplication {
                 setMessage('');
             });
         });
+        gameModeSelect.addEventListener('change', () => {
+            updateModeUI();
+            if (gameModeSelect.value !== 'multiplayer') {
+                this.network?.leaveMatchmakingQueue();
+                this.network?.leaveLobby();
+                mpQueueStatus.textContent = 'Not queued.';
+                mpLobbyPanel.classList.remove('active');
+            }
+        });
+        mpModeSearchBtn.addEventListener('click', () => setMultiplayerChoice('search'));
+        mpModeFriendsBtn.addEventListener('click', () => setMultiplayerChoice('friends'));
         loginActionBtn.addEventListener('click', async () => {
             const username = loginUsername.value.trim();
             const password = loginPassword.value;
@@ -227,33 +333,96 @@ class GameApplication {
                 setMessage('Logout service unavailable.', true);
             }
         });
+        mpQueueBtn.addEventListener('click', async () => {
+            const playerName = await resolveProfileName();
+            if (!playerName)
+                return;
+            await this.ensureMultiplayerConnection(playerName);
+            this.network?.joinMatchmakingQueue();
+            mpQueueStatus.textContent = 'Searching...';
+            setMessage('Searching for match (4 players)...');
+        });
+        mpQueueCancelBtn.addEventListener('click', () => {
+            this.network?.leaveMatchmakingQueue();
+            mpQueueStatus.textContent = 'Not queued.';
+            setMessage('Left matchmaking queue.');
+        });
+        mpHostBtn.addEventListener('click', async () => {
+            const playerName = await resolveProfileName();
+            if (!playerName)
+                return;
+            await this.ensureMultiplayerConnection(playerName);
+            this.network?.hostFriendsLobby();
+            setMessage('Creating lobby...');
+        });
+        mpJoinBtn.addEventListener('click', async () => {
+            const code = mpJoinCodeInput.value.trim().toUpperCase();
+            if (!code) {
+                setMessage('Please enter a lobby code.', true);
+                return;
+            }
+            const playerName = await resolveProfileName();
+            if (!playerName)
+                return;
+            await this.ensureMultiplayerConnection(playerName);
+            this.network?.joinFriendsLobby(code);
+            setMessage(`Joining lobby ${code}...`);
+        });
+        mpLobbyStartBtn.addEventListener('click', () => {
+            this.network?.startLobbyGame();
+        });
+        mpLobbyLeaveBtn.addEventListener('click', () => {
+            this.network?.leaveLobby();
+            mpLobbyPanel.classList.remove('active');
+            mpLobbyCode.textContent = '------';
+            mpLobbyPlayers.textContent = 'No players yet.';
+            setMessage('Left lobby.');
+        });
         startBtn.addEventListener('click', async () => {
-            let playerName = selectedPlayerName || 'Player';
-            const gameMode = gameModeSelect.value;
-            if (selectedProfileType === 'account') {
-                try {
-                    const me = await getJson('/api/auth/me');
-                    if (!me.ok || !me.user) {
-                        setMessage('Session expired. Please login again.', true);
-                        setActiveTab('login');
-                        return;
-                    }
-                    playerName = me.user.username;
-                    activeAccountUsername = me.user.username;
-                }
-                catch {
-                    setMessage('Cannot verify session. Check connection.', true);
-                    return;
-                }
-            }
-            else if (activeAccountUsername) {
-                playerName = activeAccountUsername;
-            }
-            this.startGame(playerName, gameMode === 'multiplayer').catch((err) => {
+            const playerName = await resolveProfileName();
+            if (!playerName)
+                return;
+            this.startGame(playerName, false).catch((err) => {
                 console.error('Failed to start game:', err);
                 this.ui?.addEvent(`Error: ${err.message}`);
             });
         });
+        window.addEventListener('civ:queue-status', (event) => {
+            const payload = event.detail || {};
+            if (!payload.queued) {
+                mpQueueStatus.textContent = 'Not queued.';
+                return;
+            }
+            mpQueueStatus.textContent = `Queue position: ${payload.position || 1} | Players waiting: ${payload.queuedPlayers || 1}/4`;
+        });
+        window.addEventListener('civ:lobby-updated', (event) => {
+            renderLobby(event.detail || {});
+            setMessage(`Lobby ${(event.detail || {}).lobbyCode || ''} ready.`);
+        });
+        window.addEventListener('civ:lobby-closed', () => {
+            mpLobbyPanel.classList.remove('active');
+            mpLobbyCode.textContent = '------';
+            mpLobbyPlayers.textContent = 'No players yet.';
+            setMessage('Lobby closed.');
+        });
+        window.addEventListener('civ:match-found', () => {
+            setMessage('Match found. Starting game...');
+        });
+    }
+    async ensureMultiplayerConnection(playerName) {
+        if (!this.multiplayerPlayerId) {
+            this.multiplayerPlayerId = `player-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        }
+        this.multiplayerPlayerName = playerName;
+        if (!this.network) {
+            this.network = new NetworkClient();
+        }
+        if (!this.networkHandlersBound) {
+            this.setupNetworkHandlers();
+        }
+        if (!this.network.isConnectedToServer()) {
+            await this.network.connect(this.multiplayerPlayerId, playerName);
+        }
     }
     async startGame(playerName, isMultiplayer) {
         const worldSeed = Math.floor(Math.random() * 2147483647);
@@ -266,7 +435,7 @@ class GameApplication {
         this.aiManager = new AIManager(this.gameEngine);
         // Create human player
         const humanPlayer = {
-            id: `player-${Date.now()}`,
+            id: isMultiplayer ? (this.multiplayerPlayerId || `player-${Date.now()}`) : `player-${Date.now()}`,
             name: playerName,
             isAI: false,
             isHuman: true,
@@ -287,37 +456,38 @@ class GameApplication {
         };
         this.gameEngine.addPlayer(humanPlayer);
         this.currentPlayer = humanPlayer;
-        // Add AI players
-        const aiDifficulties = [
-            'easy',
-            'medium',
-            'hard',
-        ];
-        const aiColors = ['#ff0000', '#0000ff', '#ffff00'];
-        for (let i = 0; i < 3; i++) {
-            const aiPlayer = {
-                id: `ai-${i}`,
-                name: `AI ${i + 1}`,
-                isAI: true,
-                isHuman: false,
-                difficulty: aiDifficulties[i],
-                resources: { gold: 100, food: 50, production: 25 },
-                units: [],
-                cities: [],
-                techs: [],
-                progression: {
-                    unitMovementBonus: 0,
-                    visionBonus: 0,
-                    attackBonus: 0,
-                    defenseBonus: 0,
-                    foodMultiplier: 1,
-                    productionMultiplier: 1,
-                    goldMultiplier: 1,
-                },
-                color: aiColors[i],
-            };
-            this.gameEngine.addPlayer(aiPlayer);
-            this.aiManager.registerAI(aiPlayer, aiDifficulties[i]);
+        if (!isMultiplayer) {
+            const aiDifficulties = [
+                'easy',
+                'medium',
+                'hard',
+            ];
+            const aiColors = ['#ff0000', '#0000ff', '#ffff00'];
+            for (let i = 0; i < 3; i++) {
+                const aiPlayer = {
+                    id: `ai-${i}`,
+                    name: `AI ${i + 1}`,
+                    isAI: true,
+                    isHuman: false,
+                    difficulty: aiDifficulties[i],
+                    resources: { gold: 100, food: 50, production: 25 },
+                    units: [],
+                    cities: [],
+                    techs: [],
+                    progression: {
+                        unitMovementBonus: 0,
+                        visionBonus: 0,
+                        attackBonus: 0,
+                        defenseBonus: 0,
+                        foodMultiplier: 1,
+                        productionMultiplier: 1,
+                        goldMultiplier: 1,
+                    },
+                    color: aiColors[i],
+                };
+                this.gameEngine.addPlayer(aiPlayer);
+                this.aiManager.registerAI(aiPlayer, aiDifficulties[i]);
+            }
         }
         this.aiManager.setTurnResolvedCallback((message) => {
             this.ui?.addEvent(message);
@@ -329,6 +499,8 @@ class GameApplication {
         // Initialize rendering
         this.renderer = new CanvasRenderer('gameCanvas');
         this.renderer.setLocalPlayerId(humanPlayer.id);
+        if (this.ui)
+            this.applySettings(this.ui.getSettings());
         if (humanPlayer.units.length > 0) {
             const startUnit = humanPlayer.units[0];
             this.renderer.centerCameraOn(startUnit.x, startUnit.y);
@@ -338,10 +510,16 @@ class GameApplication {
         this.setupInputHandlers();
         // Connect network if multiplayer
         if (isMultiplayer) {
-            this.network = new NetworkClient();
+            if (!this.network) {
+                this.network = new NetworkClient();
+            }
             try {
-                await this.network.connect(humanPlayer.id);
-                this.setupNetworkHandlers();
+                if (!this.network.isConnectedToServer()) {
+                    await this.network.connect(humanPlayer.id, playerName);
+                }
+                if (!this.networkHandlersBound) {
+                    this.setupNetworkHandlers();
+                }
                 this.ui?.addEvent('Connected to server');
             }
             catch (err) {
@@ -360,7 +538,7 @@ class GameApplication {
         if (bottomPanel)
             bottomPanel.style.display = 'block';
         this.ui?.addEvent('Tips: Click your units/cities to select.');
-        this.ui?.addEvent('Use H (or Esc) to open the strategy handbook anytime.');
+        this.ui?.addEvent('Press Esc to open the game menu. Press H for the strategy handbook.');
         this.ui?.addEvent('Use F to center camera on the selected unit/city.');
         // Start game loop
         this.startGameLoop();
@@ -376,17 +554,15 @@ class GameApplication {
         this.input.onKeyDown('Space', () => this.endTurn());
         this.input.onKeyDown('Enter', () => this.endTurn());
         this.input.onKeyDown('Escape', () => {
+            if (this.ui?.isPauseMenuOpen()) {
+                this.ui.hidePauseMenu();
+                return;
+            }
             if (this.ui?.closeActivePanel()) {
                 this.ui.addEvent('Closed panel.');
                 return;
             }
-            this.ui?.toggleTutorialMenu();
-            if (this.ui?.isTutorialMenuOpen()) {
-                this.ui.addEvent('Opened strategy handbook.');
-            }
-            else {
-                this.ui?.addEvent('Closed strategy handbook.');
-            }
+            this.ui?.showPauseMenu();
         });
         this.input.onKeyDown('KeyH', () => {
             this.ui?.toggleTutorialMenu();
@@ -534,6 +710,9 @@ class GameApplication {
     setupNetworkHandlers() {
         if (!this.network)
             return;
+        if (this.networkHandlersBound)
+            return;
+        this.networkHandlersBound = true;
         this.network.on('CONNECTION_STATUS', (payload) => {
             const state = payload;
             switch (state.status) {
@@ -559,6 +738,39 @@ class GameApplication {
         this.network.on('STATE_UPDATE', (data) => {
             console.log('Received state update:', data);
             // Handle state updates from server
+        });
+        this.network.on('QUEUE_STATUS', (payload) => {
+            window.dispatchEvent(new CustomEvent('civ:queue-status', { detail: payload }));
+        });
+        this.network.on('LOBBY_CREATED', (payload) => {
+            this.currentLobbyRoomId = payload?.roomId || null;
+            window.dispatchEvent(new CustomEvent('civ:lobby-updated', { detail: payload }));
+        });
+        this.network.on('LOBBY_UPDATED', (payload) => {
+            this.currentLobbyRoomId = payload?.roomId || null;
+            window.dispatchEvent(new CustomEvent('civ:lobby-updated', { detail: payload }));
+        });
+        this.network.on('LOBBY_CLOSED', (payload) => {
+            this.currentLobbyRoomId = null;
+            this.currentLobbyCode = null;
+            window.dispatchEvent(new CustomEvent('civ:lobby-closed', { detail: payload }));
+        });
+        this.network.on('MATCH_FOUND', () => {
+            window.dispatchEvent(new CustomEvent('civ:match-found'));
+        });
+        this.network.on('GAME_STARTED', async (payload) => {
+            if (this.isStartingMultiplayerGame || this.gameEngine)
+                return;
+            if (!this.multiplayerPlayerName)
+                return;
+            this.isStartingMultiplayerGame = true;
+            this.currentLobbyRoomId = payload?.roomId || this.currentLobbyRoomId;
+            try {
+                await this.startGame(this.multiplayerPlayerName, true);
+            }
+            finally {
+                this.isStartingMultiplayerGame = false;
+            }
         });
         this.network.on('PLAYER_DISCONNECTED', (data) => {
             const payload = data;
@@ -646,6 +858,10 @@ class GameApplication {
         if (this.gameEngine.isPlayerGatherLocked(this.currentPlayer.id)) {
             this.ui?.addEvent('Cannot end turn during active gathering.');
             return;
+        }
+        if (this.confirmEndTurnEnabled) {
+            if (!window.confirm('End your turn?'))
+                return;
         }
         const currentPlayer = this.gameEngine.getCurrentPlayer();
         // Only allow human player to end turn
@@ -987,6 +1203,50 @@ class GameApplication {
             this.ui?.addEvent(`Autosaved (${reason}).`);
         }
     }
+    applySettings(settings) {
+        this.confirmEndTurnEnabled = settings.confirmEndTurn;
+        this.renderer?.setShowGrid(settings.showGrid);
+        this.renderer?.setShowFPS(settings.showFPS);
+    }
+    leaveGame() {
+        if (this.gameLoopId !== null) {
+            cancelAnimationFrame(this.gameLoopId);
+            this.gameLoopId = null;
+        }
+        if (this.network) {
+            this.network.disconnect();
+            this.network = null;
+        }
+        this.networkHandlersBound = false;
+        this.currentLobbyRoomId = null;
+        this.currentLobbyCode = null;
+        this.isStartingMultiplayerGame = false;
+        this.input?.clear();
+        this.input = null;
+        this.gameEngine = null;
+        this.aiManager = null;
+        this.persistence = null;
+        this.currentPlayer = null;
+        this.selectedUnitId = null;
+        this.resourcePromptUnitId = null;
+        this.mountainPromptUnitId = null;
+        this.lastTurnSignature = null;
+        this.lastFrameTime = 0;
+        this.lastAutosaveAt = 0;
+        // Destroy old renderer — new one will be created on next startGame
+        this.renderer = null;
+        this.ui?.clearEventLog();
+        this.ui?.addEvent('You left the game. Start a new session below.');
+        const loginScreen = document.getElementById('login-screen');
+        const gameContainer = document.getElementById('game-container');
+        const bottomPanel = document.getElementById('bottom-panel');
+        if (loginScreen)
+            loginScreen.style.display = 'flex';
+        if (gameContainer)
+            gameContainer.style.display = 'none';
+        if (bottomPanel)
+            bottomPanel.style.display = 'none';
+    }
     cleanup() {
         if (this.gameLoopId !== null) {
             cancelAnimationFrame(this.gameLoopId);
@@ -994,6 +1254,7 @@ class GameApplication {
         if (this.network) {
             this.network.disconnect();
         }
+        this.networkHandlersBound = false;
         if (this.input) {
             this.input.clear();
         }

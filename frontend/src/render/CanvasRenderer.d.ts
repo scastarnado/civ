@@ -22,6 +22,11 @@ export declare class CanvasRenderer {
     private aiRumorHints;
     private readonly unitVisionRadius;
     private readonly cityVisionRadius;
+    private showGrid;
+    private showFPS;
+    private fpsLastTime;
+    private fpsFrameCount;
+    private fpsDisplay;
     private colors;
     constructor(canvasId: string);
     /**
@@ -64,6 +69,8 @@ export declare class CanvasRenderer {
     centerCameraOn(worldX: number, worldY: number): void;
     setLocalPlayerId(playerId: string): void;
     setAIRumorHints(hints: AIRumorHint[]): void;
+    setShowGrid(value: boolean): void;
+    setShowFPS(value: boolean): void;
     /**
      * Get camera position
      */

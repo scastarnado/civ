@@ -18,7 +18,7 @@ export class NetworkClient {
     /**
      * Connect to server
      */
-    async connect(playerId) {
+    async connect(playerId, playerName) {
         return new Promise((resolve, reject) => {
             try {
                 this.playerId = playerId;
@@ -30,7 +30,7 @@ export class NetworkClient {
                     this.reconnectAttempts = 0;
                     console.log('Connected to server');
                     // Send initial handshake
-                    this.send('HANDSHAKE', { playerId });
+                    this.send('HANDSHAKE', { playerId, playerName });
                     // Flush message queue
                     this.flushMessageQueue();
                     this.emitConnectionStatus('connected', {
@@ -136,6 +136,27 @@ export class NetworkClient {
             playerId: this.playerId,
             fromTurn,
         });
+    }
+    joinMatchmakingQueue() {
+        this.send('MATCHMAKING_JOIN_QUEUE', { playerId: this.playerId });
+    }
+    leaveMatchmakingQueue() {
+        this.send('MATCHMAKING_LEAVE_QUEUE', { playerId: this.playerId });
+    }
+    hostFriendsLobby() {
+        this.send('FRIENDS_HOST_LOBBY', { playerId: this.playerId });
+    }
+    joinFriendsLobby(lobbyCode) {
+        this.send('FRIENDS_JOIN_LOBBY', {
+            playerId: this.playerId,
+            lobbyCode,
+        });
+    }
+    leaveLobby() {
+        this.send('LOBBY_LEAVE', { playerId: this.playerId });
+    }
+    startLobbyGame() {
+        this.send('LOBBY_START_GAME', { playerId: this.playerId });
     }
     /**
      * Register message handler

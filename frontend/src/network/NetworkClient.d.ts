@@ -18,7 +18,7 @@ export declare class NetworkClient {
 	/**
 	 * Connect to server
 	 */
-	connect(playerId: string): Promise<void>;
+	connect(playerId: string, playerName?: string): Promise<void>;
 	/**
 	 * Attempt to reconnect
 	 */
@@ -39,6 +39,12 @@ export declare class NetworkClient {
 	 * Request state sync
 	 */
 	requestSync(fromTurn: number): void;
+	joinMatchmakingQueue(): void;
+	leaveMatchmakingQueue(): void;
+	hostFriendsLobby(): void;
+	joinFriendsLobby(lobbyCode: string): void;
+	leaveLobby(): void;
+	startLobbyGame(): void;
 	/**
 	 * Register message handler
 	 */

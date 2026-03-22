@@ -1,9 +1,9 @@
 /**
  * Game Room
- * Manages a single game session
+ * Manages one lobby/game session.
  */
 export class GameRoom {
-    constructor(roomId) {
+    constructor(roomId, lobbyCode, hostPlayerId) {
         this.gameState = null;
         this.players = new Map();
         this.disconnectedPlayers = new Map();
@@ -12,18 +12,18 @@ export class GameRoom {
         this.currentPlayerIndex = 0;
         this.isRunning = false;
         this.roomId = roomId;
+        this.lobbyCode = lobbyCode;
+        this.hostPlayerId = hostPlayerId;
     }
-    /**
-     * Add player to room
-     */
-    addPlayer(playerId, ws) {
+    addPlayer(playerId, playerName, ws) {
         if (this.players.has(playerId)) {
             this.reconnectPlayer(playerId, ws || null);
+            this.updatePlayerName(playerId, playerName);
             return;
         }
         const player = {
             id: playerId,
-            name: `Player ${this.players.size + 1}`,
+            name: playerName,
             isAI: false,
             isHuman: true,
             resources: { gold: 100, food: 50, production: 25 },
@@ -34,9 +34,17 @@ export class GameRoom {
         };
         this.players.set(playerId, { ws: ws || null, player });
         this.turnOrder.push(playerId);
-        // Start game if we have enough players
-        if (this.players.size >= 2) {
-            this.startGame();
+    }
+    updatePlayerName(playerId, playerName) {
+        const playerObj = this.players.get(playerId);
+        if (!playerObj)
+            return;
+        playerObj.player.name = playerName;
+        if (this.gameState) {
+            const statePlayer = this.gameState.players.find((p) => p.id === playerId);
+            if (statePlayer) {
+                statePlayer.name = playerName;
+            }
         }
     }
     hasPlayer(playerId) {
@@ -65,7 +73,7 @@ export class GameRoom {
             if (!this.disconnectedPlayers.has(playerId))
                 return;
             const currentPlayerId = this.turnOrder[this.currentPlayerIndex];
-            if (currentPlayerId === playerId) {
+            if (currentPlayerId === playerId && this.isRunning) {
                 this.forceAdvanceTurnForDisconnectedPlayer(playerId);
             }
             this.removePlayer(playerId);
@@ -91,9 +99,6 @@ export class GameRoom {
             this.broadcastState('PLAYER_RECONNECTED', { playerId });
         }
     }
-    /**
-     * Remove player from room
-     */
     removePlayer(playerId) {
         const existingTimer = this.disconnectTimers.get(playerId);
         if (existingTimer) {
@@ -115,19 +120,18 @@ export class GameRoom {
                 this.currentPlayerIndex = 0;
             }
         }
+        if (playerId === this.hostPlayerId && this.turnOrder.length > 0) {
+            this.hostPlayerId = this.turnOrder[0];
+        }
         if (this.players.size === 0) {
             this.isRunning = false;
         }
     }
-    /**
-     * Start game
-     */
     startGame() {
         if (this.isRunning || this.players.size < 2)
-            return;
+            return false;
         this.isRunning = true;
         console.log(`Starting game in room ${this.roomId}`);
-        // Initialize game state
         const gameState = {
             id: this.roomId,
             turn: 0,
@@ -140,51 +144,43 @@ export class GameRoom {
             lastUpdateAt: Date.now(),
         };
         this.gameState = gameState;
-        // Broadcast game started
-        this.broadcastState('GAME_STARTED', gameState);
+        this.broadcastState('GAME_STARTED', {
+            roomId: this.roomId,
+            worldSeed: gameState.worldSeed,
+            players: gameState.players.map((p) => ({ id: p.id, name: p.name })),
+        });
+        return true;
     }
-    /**
-     * Process player action
-     */
     processAction(playerId, actionType, data) {
         if (!this.gameState)
             return;
-        // Validate it's the current player's turn
         const currentPlayerId = this.turnOrder[this.currentPlayerIndex];
         if (playerId !== currentPlayerId) {
-            this.sendError(playerId, 'Not your turn');
+            sendErrorForPlayer(this.players, playerId, 'Not your turn');
             return;
         }
         switch (actionType) {
             case 'MOVE_UNIT':
-                // Server-side validation of unit movement
-                console.log(`Action: Move unit for player ${playerId}`);
                 this.broadcastState('ACTION_EXECUTED', { action: actionType, data });
                 break;
             default:
-                console.warn(`Unknown action: ${actionType}`);
                 break;
         }
     }
-    /**
-     * End current player's turn
-     */
     endPlayerTurn(playerId) {
-        if (this.turnOrder.length === 0)
+        if (!this.isRunning || this.turnOrder.length === 0)
             return;
         const currentPlayerId = this.turnOrder[this.currentPlayerIndex];
         if (playerId !== currentPlayerId) {
-            this.sendError(playerId, 'Not your turn');
+            sendErrorForPlayer(this.players, playerId, 'Not your turn');
             return;
         }
-        // Advance turn
         this.currentPlayerIndex =
             (this.currentPlayerIndex + 1) % this.turnOrder.length;
         if (this.gameState) {
             if (this.currentPlayerIndex === 0) {
                 this.gameState.turn++;
             }
-            // Notify all players
             this.broadcastState('TURN_CHANGED', {
                 turn: this.gameState.turn,
                 currentPlayerIndex: this.currentPlayerIndex,
@@ -208,44 +204,48 @@ export class GameRoom {
             currentPlayerIndex: this.currentPlayerIndex,
         });
     }
-    /**
-     * Get game state
-     */
     getGameState() {
         return this.gameState;
     }
-    /**
-     * Get player count
-     */
     getPlayerCount() {
         return this.players.size;
     }
-    /**
-     * Get room ID
-     */
     getRoomId() {
         return this.roomId;
     }
-    /**
-     * Check if room is running
-     */
+    getLobbyCode() {
+        return this.lobbyCode;
+    }
+    getHostPlayerId() {
+        return this.hostPlayerId;
+    }
+    setHostPlayerId(playerId) {
+        this.hostPlayerId = playerId;
+    }
     isGameRunning() {
         return this.isRunning;
     }
-    /**
-     * Broadcast message to all players
-     */
+    getLobbySnapshot(maxPlayers = 4) {
+        return {
+            roomId: this.roomId,
+            lobbyCode: this.lobbyCode,
+            hostPlayerId: this.hostPlayerId,
+            players: Array.from(this.players.values()).map(({ player, ws }) => ({
+                id: player.id,
+                name: player.name,
+                connected: !!ws,
+            })),
+            maxPlayers,
+            started: this.isRunning,
+        };
+    }
     broadcast(message) {
         this.players.forEach((playerObj) => {
             if (playerObj.ws && playerObj.ws.readyState === 1) {
-                // WebSocket.OPEN === 1
                 playerObj.ws.send(message);
             }
         });
     }
-    /**
-     * Broadcast state update
-     */
     broadcastState(type, data) {
         const message = {
             type,
@@ -254,55 +254,30 @@ export class GameRoom {
         };
         this.broadcast(JSON.stringify(message));
     }
-    /**
-     * Send error to specific player
-     */
-    sendError(playerId, error) {
-        const playerObj = this.players.get(playerId);
-        if (playerObj?.ws && playerObj.ws.readyState === 1) {
-            const message = {
-                type: 'ERROR',
-                payload: { error },
-                timestamp: Date.now(),
-            };
-            playerObj.ws.send(JSON.stringify(message));
-        }
-    }
-    /**
-     * Get player by ID
-     */
     getPlayer(playerId) {
         const playerObj = this.players.get(playerId);
         return playerObj?.player || null;
     }
-    /**
-     * Get all players
-     */
     getPlayers() {
         return Array.from(this.players.values()).map((p) => p.player);
     }
-    // ============ Helper Methods ============
+    updatePlayerConnection(playerId, ws) {
+        this.reconnectPlayer(playerId, ws);
+    }
     getColorForPlayer(index) {
         const colors = ['#00ff00', '#ff0000', '#0000ff', '#ffff00'];
         return colors[index % colors.length];
     }
-    /**
-     * Update WebSocket connection for player
-     */
-    updatePlayerConnection(playerId, ws) {
-        this.reconnectPlayer(playerId, ws);
-    }
-    /**
-     * Serialize room state for persistence
-     */
-    serialize() {
-        return {
-            roomId: this.roomId,
-            gameState: this.gameState,
-            turnOrder: this.turnOrder,
-            currentPlayerIndex: this.currentPlayerIndex,
-            isRunning: this.isRunning,
+}
+function sendErrorForPlayer(players, playerId, error) {
+    const playerObj = players.get(playerId);
+    if (playerObj?.ws && playerObj.ws.readyState === 1) {
+        const message = {
+            type: 'ERROR',
+            payload: { error },
+            timestamp: Date.now(),
         };
+        playerObj.ws.send(JSON.stringify(message));
     }
 }
 //# sourceMappingURL=GameRoom.js.map

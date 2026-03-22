@@ -1,11 +1,26 @@
 /**
  * Game Room
- * Manages a single game session
+ * Manages one lobby/game session.
  */
 import { WebSocket } from 'ws';
 import { GameState, Player } from '../core/types';
+export interface LobbyPlayerSummary {
+    id: string;
+    name: string;
+    connected: boolean;
+}
+export interface LobbySnapshot {
+    roomId: string;
+    lobbyCode: string;
+    hostPlayerId: string;
+    players: LobbyPlayerSummary[];
+    maxPlayers: number;
+    started: boolean;
+}
 export declare class GameRoom {
     private roomId;
+    private lobbyCode;
+    private hostPlayerId;
     private gameState;
     private players;
     private disconnectedPlayers;
@@ -13,76 +28,31 @@ export declare class GameRoom {
     private turnOrder;
     private currentPlayerIndex;
     private isRunning;
-    constructor(roomId: string);
-    /**
-     * Add player to room
-     */
-    addPlayer(playerId: string, ws?: WebSocket): void;
+    constructor(roomId: string, lobbyCode: string, hostPlayerId: string);
+    addPlayer(playerId: string, playerName: string, ws?: WebSocket): void;
+    updatePlayerName(playerId: string, playerName: string): void;
     hasPlayer(playerId: string): boolean;
     isPlayerDisconnected(playerId: string): boolean;
     markPlayerDisconnected(playerId: string, graceMs: number): void;
     reconnectPlayer(playerId: string, ws: WebSocket | null): void;
-    /**
-     * Remove player from room
-     */
     removePlayer(playerId: string): void;
-    /**
-     * Start game
-     */
-    private startGame;
-    /**
-     * Process player action
-     */
+    startGame(): boolean;
     processAction(playerId: string, actionType: string, data: unknown): void;
-    /**
-     * End current player's turn
-     */
     endPlayerTurn(playerId: string): void;
     private forceAdvanceTurnForDisconnectedPlayer;
-    /**
-     * Get game state
-     */
     getGameState(): GameState | null;
-    /**
-     * Get player count
-     */
     getPlayerCount(): number;
-    /**
-     * Get room ID
-     */
     getRoomId(): string;
-    /**
-     * Check if room is running
-     */
+    getLobbyCode(): string;
+    getHostPlayerId(): string;
+    setHostPlayerId(playerId: string): void;
     isGameRunning(): boolean;
-    /**
-     * Broadcast message to all players
-     */
+    getLobbySnapshot(maxPlayers?: number): LobbySnapshot;
     broadcast(message: string): void;
-    /**
-     * Broadcast state update
-     */
     private broadcastState;
-    /**
-     * Send error to specific player
-     */
-    private sendError;
-    /**
-     * Get player by ID
-     */
     getPlayer(playerId: string): Player | null;
-    /**
-     * Get all players
-     */
     getPlayers(): Player[];
-    private getColorForPlayer;
-    /**
-     * Update WebSocket connection for player
-     */
     updatePlayerConnection(playerId: string, ws: WebSocket): void;
-    /**
-     * Serialize room state for persistence
-     */
-    serialize(): unknown;
+    private getColorForPlayer;
 }
 //# sourceMappingURL=GameRoom.d.ts.map

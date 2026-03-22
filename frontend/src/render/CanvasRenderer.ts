@@ -32,6 +32,11 @@ export class CanvasRenderer {
 	private aiRumorHints: AIRumorHint[] = [];
 	private readonly unitVisionRadius: number = 5;
 	private readonly cityVisionRadius: number = 4;
+	private showGrid: boolean = true;
+	private showFPS: boolean = false;
+	private fpsLastTime: number = 0;
+	private fpsFrameCount: number = 0;
+	private fpsDisplay: number = 0;
 
 	// Colors
 	private colors = {
@@ -86,7 +91,7 @@ export class CanvasRenderer {
 		this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
 		// Draw grid background
-		this.drawGrid();
+		if (this.showGrid) this.drawGrid();
 
 		const localPlayer = this.getLocalPlayer(gameState);
 		if (!this.cameraInitialized && localPlayer) {
@@ -129,6 +134,21 @@ export class CanvasRenderer {
 		// Draw selection highlight
 		if (this.selectedEntity) {
 			this.drawSelectionHighlight();
+		}
+
+		// FPS counter overlay
+		const now = performance.now();
+		this.fpsFrameCount++;
+		if (now - this.fpsLastTime >= 1000) {
+			this.fpsDisplay = this.fpsFrameCount;
+			this.fpsFrameCount = 0;
+			this.fpsLastTime = now;
+		}
+		if (this.showFPS) {
+			this.ctx.font = `12px 'Courier New', monospace`;
+			this.ctx.fillStyle = '#00ff00';
+			this.ctx.fillText(`FPS: ${this.fpsDisplay}`, 8, 8);
+			this.ctx.font = `14px 'Courier New', monospace`;
 		}
 	}
 
@@ -434,6 +454,14 @@ export class CanvasRenderer {
 
 	setAIRumorHints(hints: AIRumorHint[]): void {
 		this.aiRumorHints = hints.slice(0, 10);
+	}
+
+	setShowGrid(value: boolean): void {
+		this.showGrid = value;
+	}
+
+	setShowFPS(value: boolean): void {
+		this.showFPS = value;
 	}
 
 	/**
