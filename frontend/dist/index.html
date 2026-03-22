@@ -28,6 +28,52 @@
             --hud-danger: #ff5f5f;
         }
 
+        @keyframes shell-fade-up {
+            from {
+                opacity: 0;
+                transform: translateY(14px) scale(0.985);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @keyframes ambient-shift {
+            0% {
+                background-position: 0% 0%, 100% 100%, 0% 50%;
+            }
+
+            50% {
+                background-position: 6% 4%, 94% 96%, 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 0%, 100% 100%, 0% 50%;
+            }
+        }
+
+        @keyframes title-glow {
+            0% {
+                text-shadow: 0 0 8px rgba(0, 255, 136, 0.16), 0 0 20px rgba(0, 255, 136, 0.2);
+            }
+
+            100% {
+                text-shadow: 0 0 14px rgba(0, 255, 136, 0.3), 0 0 30px rgba(0, 255, 136, 0.34);
+            }
+        }
+
+        @keyframes subtle-pulse {
+            0% {
+                box-shadow: 0 0 0 rgba(30, 255, 149, 0.16);
+            }
+
+            100% {
+                box-shadow: 0 0 20px rgba(30, 255, 149, 0.2);
+            }
+        }
+
         #app {
             width: 100vw;
             height: 100vh;
@@ -41,6 +87,7 @@
             gap: 10px;
             padding: 10px;
             background-color: #0a0a0a;
+            animation: shell-fade-up 280ms ease-out;
         }
 
         #left-panel {
@@ -50,6 +97,7 @@
             background-color: #1a1a1a;
             overflow-y: auto;
             font-size: 12px;
+            transition: border-color 180ms ease, box-shadow 180ms ease;
         }
 
         #canvas-container {
@@ -59,6 +107,8 @@
             justify-content: center;
             border: 2px solid #00ff00;
             background-color: #0a0a0a;
+            box-shadow: inset 0 0 20px rgba(0, 255, 136, 0.06);
+            animation: subtle-pulse 2.5s ease-in-out infinite alternate;
         }
 
         canvas {
@@ -74,6 +124,7 @@
             background-color: #1a1a1a;
             overflow-y: auto;
             font-size: 12px;
+            transition: border-color 180ms ease, box-shadow 180ms ease;
         }
 
         #bottom-panel {
@@ -85,6 +136,7 @@
             background-color: #1a1a1a;
             overflow-y: auto;
             font-size: 12px;
+            animation: shell-fade-up 320ms ease-out;
         }
 
         .panel-title {
@@ -107,10 +159,17 @@
             cursor: pointer;
             font-family: 'Courier New', monospace;
             font-size: 12px;
+            transition: transform 120ms ease, background-color 140ms ease, box-shadow 160ms ease, border-color 140ms ease;
         }
 
         button:hover {
             background-color: #005500;
+            transform: translateY(-1px);
+            box-shadow: 0 0 12px rgba(0, 255, 136, 0.24);
+        }
+
+        button:active {
+            transform: translateY(0);
         }
 
         .loading {
@@ -141,6 +200,8 @@
                 radial-gradient(circle at 15% 15%, rgba(15, 88, 48, 0.45), transparent 35%),
                 radial-gradient(circle at 85% 75%, rgba(8, 61, 34, 0.4), transparent 40%),
                 linear-gradient(140deg, #090d0b, #0f1612 45%, #090d0b);
+            background-size: 120% 120%, 120% 120%, 200% 200%;
+            animation: ambient-shift 16s ease-in-out infinite;
         }
 
         .menu-shell {
@@ -151,6 +212,7 @@
             grid-template-columns: 1.2fr 1fr;
             box-shadow: 0 0 40px rgba(0, 255, 136, 0.16);
             overflow: hidden;
+            animation: shell-fade-up 360ms ease-out;
         }
 
         .menu-hero {
@@ -171,6 +233,7 @@
             color: var(--hud-green);
             text-shadow: 0 0 14px rgba(0, 255, 136, 0.35);
             line-height: 1;
+            animation: title-glow 2.6s ease-in-out infinite alternate;
         }
 
         .menu-subtitle {
@@ -228,6 +291,7 @@
 
         .auth-panel.active {
             display: grid;
+            animation: shell-fade-up 220ms ease-out;
         }
 
         .menu-row {
@@ -280,6 +344,7 @@
 
         .mp-section.active {
             display: grid;
+            animation: shell-fade-up 200ms ease-out;
         }
 
         .lobby-code {
@@ -291,6 +356,7 @@
             border: 1px dashed #1eff95;
             background: #0d1510;
             text-align: center;
+            box-shadow: inset 0 0 10px rgba(30, 255, 149, 0.12);
         }
 
         .lobby-players {
@@ -314,6 +380,22 @@
             font-weight: bold;
         }
 
+        #left-panel:hover,
+        #right-panel:hover {
+            border-color: #35ffab;
+            box-shadow: 0 0 16px rgba(0, 255, 136, 0.14);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            *,
+            *::before,
+            *::after {
+                animation: none !important;
+                transition: none !important;
+            }
+        }
+
         @media (max-width: 860px) {
             .menu-shell {
                 grid-template-columns: 1fr;
@@ -327,7 +409,7 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="/assets/index-B_2R2i7j.js"></script>
+  <script type="module" crossorigin src="/assets/index-Bitrrnlv.js"></script>
 </head>
 
 <body>
@@ -411,12 +493,15 @@
                         <div id="multiplayer-options" class="menu-row" style="display: none;">
                             <label>Multiplayer Type</label>
                             <div class="mp-choice-grid">
-                                <button id="mp-mode-search" class="mp-choice-btn active" type="button">Search Game</button>
-                                <button id="mp-mode-friends" class="mp-choice-btn" type="button">Play With Friends</button>
+                                <button id="mp-mode-search" class="mp-choice-btn active" type="button">Search
+                                    Game</button>
+                                <button id="mp-mode-friends" class="mp-choice-btn" type="button">Play With
+                                    Friends</button>
                             </div>
 
                             <div id="mp-section-search" class="mp-section active">
-                                <div style="font-size: 12px; color: #9ef5cf;">Join queue and start automatically when 4 players are ready.</div>
+                                <div style="font-size: 12px; color: #9ef5cf;">Join queue and start automatically when 4
+                                    players are ready.</div>
                                 <button id="mp-queue-btn" type="button">Search Match</button>
                                 <button id="mp-queue-cancel-btn" type="button">Leave Queue</button>
                                 <div id="mp-queue-status" style="font-size: 12px; color: #9ef5cf;">Not queued.</div>

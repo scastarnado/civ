@@ -132,14 +132,14 @@ class GameApplication {
                 credentials: 'include',
                 body: JSON.stringify(body),
             });
-            return (await response.json());
+            return await response.json();
         };
         const getJson = async (url) => {
             const response = await fetch(url, {
                 method: 'GET',
                 credentials: 'include',
             });
-            return (await response.json());
+            return await response.json();
         };
         const setMessage = (text, isError = false) => {
             authMessage.textContent = text;
@@ -212,7 +212,8 @@ class GameApplication {
                 const status = player.connected === false ? ' (reconnecting)' : '';
                 return `${isHost ? '[HOST] ' : ''}${player.name || player.id}${status}`;
             });
-            mpLobbyPlayers.textContent = rows.length > 0 ? rows.join('\n') : 'No players yet.';
+            mpLobbyPlayers.textContent =
+                rows.length > 0 ? rows.join('\n') : 'No players yet.';
             mpLobbyStartBtn.style.display =
                 payload.hostPlayerId === this.multiplayerPlayerId ? 'block' : 'none';
         };
@@ -435,7 +436,9 @@ class GameApplication {
         this.aiManager = new AIManager(this.gameEngine);
         // Create human player
         const humanPlayer = {
-            id: isMultiplayer ? (this.multiplayerPlayerId || `player-${Date.now()}`) : `player-${Date.now()}`,
+            id: isMultiplayer ?
+                this.multiplayerPlayerId || `player-${Date.now()}`
+                : `player-${Date.now()}`,
             name: playerName,
             isAI: false,
             isHuman: true,
@@ -457,11 +460,7 @@ class GameApplication {
         this.gameEngine.addPlayer(humanPlayer);
         this.currentPlayer = humanPlayer;
         if (!isMultiplayer) {
-            const aiDifficulties = [
-                'easy',
-                'medium',
-                'hard',
-            ];
+            const aiDifficulties = ['easy', 'medium', 'hard'];
             const aiColors = ['#ff0000', '#0000ff', '#ffff00'];
             for (let i = 0; i < 3; i++) {
                 const aiPlayer = {
@@ -1272,4 +1271,5 @@ document.addEventListener('DOMContentLoaded', async () => {
         app.cleanup();
     });
 });
+//# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

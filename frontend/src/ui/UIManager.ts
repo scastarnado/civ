@@ -227,6 +227,7 @@ Researched: ${player.techs.length}`;
 	private createCityOverlay(): {
 		overlay: HTMLDivElement;
 		content: HTMLDivElement;
+		dragHandle: HTMLDivElement;
 	} {
 		const overlay = document.createElement('div');
 		overlay.style.position = 'fixed';
@@ -235,18 +236,130 @@ Researched: ${player.techs.length}`;
 		overlay.style.transform = 'translate(-50%, -50%)';
 		overlay.style.background = '#111111';
 		overlay.style.border = '2px solid #00ff00';
-		overlay.style.padding = '14px';
-		overlay.style.width = '560px';
-		overlay.style.maxHeight = '76vh';
-		overlay.style.overflowY = 'auto';
+		overlay.style.width = 'min(980px, 92vw)';
+		overlay.style.height = 'min(860px, 82vh)';
+		overlay.style.display = 'none';
+		overlay.style.flexDirection = 'column';
+		overlay.style.overflow = 'hidden';
+		overlay.style.boxShadow = '0 18px 42px rgba(0, 0, 0, 0.52)';
 		overlay.style.display = 'none';
 		overlay.style.zIndex = '25';
 
+		const dragHandle = document.createElement('div');
+		dragHandle.style.display = 'flex';
+		dragHandle.style.alignItems = 'center';
+		dragHandle.style.justifyContent = 'space-between';
+		dragHandle.style.padding = '10px 12px';
+		dragHandle.style.background = 'linear-gradient(180deg, #14331f, #0d2517)';
+		dragHandle.style.borderBottom = '1px solid #00aa66';
+		dragHandle.style.cursor = 'grab';
+		dragHandle.style.userSelect = 'none';
+
+		const dragTitle = document.createElement('div');
+		dragTitle.textContent = 'City Management';
+		dragTitle.style.fontWeight = 'bold';
+		dragTitle.style.letterSpacing = '0.3px';
+		dragHandle.appendChild(dragTitle);
+
+		const dragActions = document.createElement('div');
+		dragActions.style.display = 'flex';
+		dragActions.style.alignItems = 'center';
+		dragActions.style.gap = '8px';
+		dragHandle.appendChild(dragActions);
+
+		const dragHint = document.createElement('div');
+		dragHint.textContent = 'Drag to move';
+		dragHint.style.opacity = '0.8';
+		dragHint.style.fontSize = '11px';
+		dragActions.appendChild(dragHint);
+
+		const closeBtn = document.createElement('button');
+		closeBtn.type = 'button';
+		closeBtn.textContent = 'X';
+		closeBtn.title = 'Close city management';
+		closeBtn.setAttribute('aria-label', 'Close city management panel');
+		closeBtn.style.width = '28px';
+		closeBtn.style.height = '28px';
+		closeBtn.style.padding = '0';
+		closeBtn.style.lineHeight = '1';
+		closeBtn.style.fontWeight = 'bold';
+		closeBtn.style.cursor = 'pointer';
+		closeBtn.addEventListener('click', (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+			this.hideCityManagement(true);
+		});
+		dragActions.appendChild(closeBtn);
+
+		overlay.appendChild(dragHandle);
+
 		const content = document.createElement('div');
+		content.style.flex = '1';
+		content.style.overflowY = 'auto';
+		content.style.padding = '12px';
 		overlay.appendChild(content);
 		document.body.appendChild(overlay);
+		this.makeOverlayDraggable(overlay, dragHandle);
 
-		return { overlay, content };
+		return { overlay, content, dragHandle };
+	}
+
+	private makeOverlayDraggable(
+		overlay: HTMLDivElement,
+		handle: HTMLDivElement,
+	): void {
+		let dragging = false;
+		let pointerId = -1;
+		let startX = 0;
+		let startY = 0;
+		let originLeft = 0;
+		let originTop = 0;
+
+		const clamp = (value: number, min: number, max: number): number => {
+			return Math.max(min, Math.min(max, value));
+		};
+
+		handle.addEventListener('pointerdown', (event) => {
+			if (event.button !== 0) return;
+			const rect = overlay.getBoundingClientRect();
+			overlay.style.left = `${rect.left}px`;
+			overlay.style.top = `${rect.top}px`;
+			overlay.style.transform = 'none';
+
+			dragging = true;
+			pointerId = event.pointerId;
+			startX = event.clientX;
+			startY = event.clientY;
+			originLeft = rect.left;
+			originTop = rect.top;
+			handle.style.cursor = 'grabbing';
+			handle.setPointerCapture(pointerId);
+			event.preventDefault();
+		});
+
+		handle.addEventListener('pointermove', (event) => {
+			if (!dragging || event.pointerId !== pointerId) return;
+			const deltaX = event.clientX - startX;
+			const deltaY = event.clientY - startY;
+			const maxLeft = Math.max(0, window.innerWidth - overlay.offsetWidth);
+			const maxTop = Math.max(0, window.innerHeight - overlay.offsetHeight);
+			const nextLeft = clamp(originLeft + deltaX, 0, maxLeft);
+			const nextTop = clamp(originTop + deltaY, 0, maxTop);
+
+			overlay.style.left = `${nextLeft}px`;
+			overlay.style.top = `${nextTop}px`;
+		});
+
+		const endDrag = (event: PointerEvent): void => {
+			if (!dragging || event.pointerId !== pointerId) return;
+			dragging = false;
+			handle.style.cursor = 'grab';
+			handle.releasePointerCapture(pointerId);
+			pointerId = -1;
+		};
+
+		handle.addEventListener('pointerup', endDrag);
+		handle.addEventListener('pointercancel', endDrag);
 	}
 
 	private createResourceOverlays(): {
@@ -737,6 +850,9 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
 		onClose: () => void,
 	): void {
 		this.cityOverlayOnClose = onClose;
+		this.cityOverlay.style.left = '50%';
+		this.cityOverlay.style.top = '50%';
+		this.cityOverlay.style.transform = 'translate(-50%, -50%)';
 		this.cityOverlayContent.innerHTML = '';
 
 		const title = document.createElement('div');
@@ -788,49 +904,562 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
 				return;
 			}
 
+			const webWrap = document.createElement('div');
+			webWrap.style.position = 'relative';
+			webWrap.style.minHeight = '660px';
+			webWrap.style.border = '1px solid #00aa00';
+			webWrap.style.background =
+				'radial-gradient(circle at center, rgba(0, 255, 136, 0.08), rgba(0, 0, 0, 0.22) 55%, rgba(0, 0, 0, 0.45) 100%)';
+			webWrap.style.overflow = 'hidden';
+			webWrap.style.minWidth = '0';
+
+			const skillLayout = document.createElement('div');
+			skillLayout.style.display = 'grid';
+			skillLayout.style.gridTemplateColumns =
+				'minmax(0, 1.7fr) minmax(280px, 0.9fr)';
+			skillLayout.style.gap = '12px';
+			skillLayout.style.alignItems = 'stretch';
+			skillLayout.style.marginBottom = '10px';
+
+			const webViewport = document.createElement('div');
+			webViewport.style.position = 'absolute';
+			webViewport.style.left = '0';
+			webViewport.style.top = '0';
+			webViewport.style.width = '100%';
+			webViewport.style.height = '100%';
+			webViewport.style.cursor = 'grab';
+			webViewport.style.touchAction = 'none';
+			webWrap.appendChild(webViewport);
+
+			const webWorld = document.createElement('div');
+			webWorld.style.position = 'absolute';
+			webWorld.style.left = '0';
+			webWorld.style.top = '0';
+			webWorld.style.width = '100%';
+			webWorld.style.height = '100%';
+			webWorld.style.transformOrigin = '50% 50%';
+			webViewport.appendChild(webWorld);
+
+			const linkLayer = document.createElementNS(
+				'http://www.w3.org/2000/svg',
+				'svg',
+			);
+			linkLayer.setAttribute('viewBox', '0 0 1000 1000');
+			linkLayer.setAttribute('preserveAspectRatio', 'none');
+			linkLayer.style.position = 'absolute';
+			linkLayer.style.left = '0';
+			linkLayer.style.top = '0';
+			linkLayer.style.width = '100%';
+			linkLayer.style.height = '100%';
+			webWorld.appendChild(linkLayer);
+
+			const nodeLayer = document.createElement('div');
+			nodeLayer.style.position = 'absolute';
+			nodeLayer.style.left = '0';
+			nodeLayer.style.top = '0';
+			nodeLayer.style.width = '100%';
+			nodeLayer.style.height = '100%';
+			webWorld.appendChild(nodeLayer);
+
+			const graphControls = document.createElement('div');
+			graphControls.style.position = 'absolute';
+			graphControls.style.top = '8px';
+			graphControls.style.right = '8px';
+			graphControls.style.display = 'flex';
+			graphControls.style.alignItems = 'center';
+			graphControls.style.gap = '6px';
+			graphControls.style.padding = '6px 8px';
+			graphControls.style.border = '1px solid #00aa66';
+			graphControls.style.background = 'rgba(8, 22, 14, 0.86)';
+			graphControls.style.zIndex = '2';
+			webWrap.appendChild(graphControls);
+
+			const zoomOutBtn = document.createElement('button');
+			zoomOutBtn.textContent = '-';
+			zoomOutBtn.style.width = '28px';
+			zoomOutBtn.style.padding = '2px 0';
+			graphControls.appendChild(zoomOutBtn);
+
+			const zoomInBtn = document.createElement('button');
+			zoomInBtn.textContent = '+';
+			zoomInBtn.style.width = '28px';
+			zoomInBtn.style.padding = '2px 0';
+			graphControls.appendChild(zoomInBtn);
+
+			const zoomResetBtn = document.createElement('button');
+			zoomResetBtn.textContent = 'Reset';
+			zoomResetBtn.style.padding = '2px 6px';
+			graphControls.appendChild(zoomResetBtn);
+
+			const zoomLabel = document.createElement('span');
+			zoomLabel.style.fontSize = '11px';
+			zoomLabel.style.minWidth = '52px';
+			graphControls.appendChild(zoomLabel);
+
+			const center = { x: 50, y: 50 };
+			const optionById = new Map(options.map((opt) => [opt.id, opt]));
+			const nodePos = new Map<string, { x: number; y: number }>();
+			const ringGroups = new Map<number, CityManagementOption[]>();
+
+			const getInternalDeps = (option: CityManagementOption): string[] => {
+				return option.prerequisiteIds.filter((depId) => optionById.has(depId));
+			};
+
+			const depthCache = new Map<string, number>();
+			const getDepth = (optionId: string): number => {
+				const cached = depthCache.get(optionId);
+				if (cached !== undefined) {
+					return cached;
+				}
+
+				const option = optionById.get(optionId);
+				if (!option) {
+					return 0;
+				}
+
+				const deps = getInternalDeps(option);
+				const depth =
+					deps.length === 0 ?
+						0
+					:	Math.max(...deps.map((depId) => getDepth(depId))) + 1;
+				depthCache.set(optionId, depth);
+				return depth;
+			};
+
 			options.forEach((option) => {
-				const row = document.createElement('div');
-				row.style.border = '1px solid #00aa00';
-				row.style.padding = '8px';
-				row.style.marginBottom = '6px';
-
-				const name = document.createElement('div');
-				name.style.fontWeight = 'bold';
-				name.textContent = `${option.name} (${option.kind})`;
-				row.appendChild(name);
-
-				const desc = document.createElement('div');
-				desc.style.margin = '4px 0';
-				desc.textContent = option.description;
-				row.appendChild(desc);
-
-				const cost = document.createElement('div');
-				cost.textContent = `Cost G:${option.cost.gold} F:${option.cost.food} P:${option.cost.production}`;
-				row.appendChild(cost);
-
-				const status = document.createElement('div');
-				status.style.marginTop = '4px';
-				if (option.owned) {
-					status.textContent = 'Completed';
-				} else if (option.lockedByPrerequisite) {
-					status.textContent = 'Locked by prerequisite';
-				} else if (!option.canAfford) {
-					status.textContent = 'Not enough resources';
-				} else {
-					status.textContent = 'Available';
-				}
-				row.appendChild(status);
-
-				if (!option.owned && !option.lockedByPrerequisite) {
-					const actionBtn = document.createElement('button');
-					actionBtn.textContent = `Start ${option.kind}`;
-					actionBtn.disabled = !option.canAfford;
-					actionBtn.addEventListener('click', () => onSelect(option.id));
-					row.appendChild(actionBtn);
-				}
-
-				tabContent.appendChild(row);
+				const depth = getDepth(option.id);
+				const ring = ringGroups.get(depth) || [];
+				ring.push(option);
+				ringGroups.set(depth, ring);
 			});
+
+			const maxDepth = Math.max(...Array.from(ringGroups.keys()), 0);
+			const outerRadius = 43;
+			const innerRadius = 14;
+			const ringStep =
+				maxDepth === 0 ? 0 : (outerRadius - innerRadius) / maxDepth;
+
+			const hub = document.createElement('div');
+			hub.textContent = 'CITY CORE';
+			hub.style.position = 'absolute';
+			hub.style.left = `${center.x}%`;
+			hub.style.top = `${center.y}%`;
+			hub.style.transform = 'translate(-50%, -50%)';
+			hub.style.width = '86px';
+			hub.style.height = '86px';
+			hub.style.display = 'flex';
+			hub.style.alignItems = 'center';
+			hub.style.justifyContent = 'center';
+			hub.style.textAlign = 'center';
+			hub.style.borderRadius = '50%';
+			hub.style.border = '2px solid #d9ffb1';
+			hub.style.background =
+				'radial-gradient(circle at 35% 35%, rgba(236, 255, 178, 0.46), rgba(20, 80, 44, 0.92) 55%, rgba(5, 12, 8, 0.96) 100%)';
+			hub.style.fontSize = '11px';
+			hub.style.fontWeight = 'bold';
+			hub.style.boxShadow =
+				'0 0 0 2px rgba(217, 255, 177, 0.16), 0 0 24px rgba(208, 255, 164, 0.28)';
+			nodeLayer.appendChild(hub);
+
+			let zoom = 1;
+			let panX = 0;
+			let panY = 0;
+			let dragging = false;
+			let dragStartX = 0;
+			let dragStartY = 0;
+
+			const clamp = (value: number, min: number, max: number): number => {
+				return Math.max(min, Math.min(max, value));
+			};
+
+			const clampPan = (): void => {
+				const viewportRect = webViewport.getBoundingClientRect();
+				const overflowX = Math.max(
+					0,
+					(viewportRect.width * zoom - viewportRect.width) / 2,
+				);
+				const overflowY = Math.max(
+					0,
+					(viewportRect.height * zoom - viewportRect.height) / 2,
+				);
+				panX = clamp(panX, -overflowX, overflowX);
+				panY = clamp(panY, -overflowY, overflowY);
+			};
+
+			const updateGraphTransform = (): void => {
+				clampPan();
+				webWorld.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+				zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
+			};
+
+			const setZoom = (nextZoom: number): void => {
+				zoom = clamp(nextZoom, 0.55, 2.1);
+				updateGraphTransform();
+			};
+
+			zoomOutBtn.addEventListener('click', () => setZoom(zoom - 0.12));
+			zoomInBtn.addEventListener('click', () => setZoom(zoom + 0.12));
+			zoomResetBtn.addEventListener('click', () => {
+				zoom = 1;
+				panX = 0;
+				panY = 0;
+				updateGraphTransform();
+			});
+
+			webViewport.addEventListener(
+				'wheel',
+				(event) => {
+					event.preventDefault();
+					const direction = event.deltaY < 0 ? 1 : -1;
+					setZoom(zoom + direction * 0.08);
+				},
+				{ passive: false },
+			);
+
+			webViewport.addEventListener('pointerdown', (event) => {
+				if (event.button !== 0) return;
+				const target = event.target as HTMLElement;
+				if (target.closest('button')) return;
+				dragging = true;
+				dragStartX = event.clientX;
+				dragStartY = event.clientY;
+				webViewport.style.cursor = 'grabbing';
+				webViewport.setPointerCapture(event.pointerId);
+			});
+
+			webViewport.addEventListener('pointermove', (event) => {
+				if (!dragging) return;
+				const deltaX = event.clientX - dragStartX;
+				const deltaY = event.clientY - dragStartY;
+				dragStartX = event.clientX;
+				dragStartY = event.clientY;
+				panX += deltaX;
+				panY += deltaY;
+				updateGraphTransform();
+			});
+
+			const endGraphDrag = (event: PointerEvent): void => {
+				if (!dragging) return;
+				dragging = false;
+				webViewport.style.cursor = 'grab';
+				webViewport.releasePointerCapture(event.pointerId);
+			};
+
+			webViewport.addEventListener('pointerup', endGraphDrag);
+			webViewport.addEventListener('pointercancel', endGraphDrag);
+			window.addEventListener('resize', updateGraphTransform);
+			updateGraphTransform();
+
+			Array.from(ringGroups.entries())
+				.sort(([depthA], [depthB]) => depthA - depthB)
+				.forEach(([depth, ringOptions]) => {
+					const radius = innerRadius + ringStep * depth;
+					ringOptions
+						.slice()
+						.sort((left, right) => left.name.localeCompare(right.name))
+						.forEach((option, idx) => {
+							const angle =
+								(Math.PI * 2 * idx) / Math.max(1, ringOptions.length) -
+								Math.PI / 2 +
+								depth * 0.16;
+							const x = center.x + Math.cos(angle) * radius;
+							const y = center.y + Math.sin(angle) * radius;
+							nodePos.set(option.id, { x, y });
+						});
+				});
+
+			const drawLink = (
+				from: { x: number; y: number },
+				to: { x: number; y: number },
+				locked: boolean,
+			): void => {
+				const line = document.createElementNS(
+					'http://www.w3.org/2000/svg',
+					'line',
+				);
+				line.setAttribute('x1', `${from.x}%`);
+				line.setAttribute('y1', `${from.y}%`);
+				line.setAttribute('x2', `${to.x}%`);
+				line.setAttribute('y2', `${to.y}%`);
+				line.setAttribute('stroke', locked ? '#446655' : '#2de093');
+				line.setAttribute('stroke-width', locked ? '1.2' : '1.8');
+				line.setAttribute('stroke-opacity', locked ? '0.45' : '0.78');
+				if (locked) {
+					line.setAttribute('stroke-dasharray', '6 4');
+				}
+				linkLayer.appendChild(line);
+			};
+
+			options.forEach((option) => {
+				const to = nodePos.get(option.id);
+				if (!to) return;
+
+				const deps = getInternalDeps(option);
+
+				if (deps.length === 0) {
+					drawLink(center, to, option.lockedByPrerequisite);
+					return;
+				}
+
+				deps.forEach((depId) => {
+					const from = nodePos.get(depId);
+					if (from) {
+						drawLink(from, to, option.lockedByPrerequisite);
+					}
+				});
+			});
+
+			const detailPanel = document.createElement('div');
+			detailPanel.style.border = '1px solid #00aa66';
+			detailPanel.style.background =
+				'linear-gradient(180deg, rgba(16, 22, 18, 0.98), rgba(6, 13, 10, 0.98))';
+			detailPanel.style.padding = '14px';
+			detailPanel.style.minHeight = '660px';
+			detailPanel.style.boxShadow = 'inset 0 0 18px rgba(255, 231, 164, 0.06)';
+			detailPanel.style.display = 'flex';
+			detailPanel.style.flexDirection = 'column';
+			detailPanel.style.gap = '10px';
+
+			const nodeButtons = new Map<string, HTMLButtonElement>();
+			let selectedOptionId =
+				options.find((option) => !option.lockedByPrerequisite)?.id ||
+				options[0]?.id ||
+				'';
+			const dependentCounts = new Map<string, number>();
+			options.forEach((option) => {
+				getInternalDeps(option).forEach((depId) => {
+					dependentCounts.set(depId, (dependentCounts.get(depId) || 0) + 1);
+				});
+			});
+
+			const getOptionStatus = (
+				option: CityManagementOption,
+			): {
+				text: string;
+				color: string;
+			} => {
+				if (option.owned) {
+					return { text: 'Completed', color: '#aaffaa' };
+				}
+				if (option.lockedByPrerequisite) {
+					return { text: 'Requires prerequisite unlocks', color: '#88aa99' };
+				}
+				if (!option.canAfford) {
+					return { text: 'Insufficient resources', color: '#ffcc66' };
+				}
+				return { text: 'Ready to unlock', color: '#8feebb' };
+			};
+
+			const getNodeGlyph = (option: CityManagementOption): string => {
+				const words = option.name.split(/\s+/).filter(Boolean);
+				if (words.length === 1) {
+					return words[0].slice(0, 2).toUpperCase();
+				}
+				return words
+					.slice(0, 2)
+					.map((word) => word[0])
+					.join('')
+					.toUpperCase();
+			};
+
+			const updateNodeSelectionStyles = (): void => {
+				nodeButtons.forEach((button, optionId) => {
+					const option = optionById.get(optionId);
+					if (!option) return;
+					const isSelected = optionId === selectedOptionId;
+					button.style.borderColor =
+						isSelected ? '#ffe894'
+						: option.owned ? '#9bffbc'
+						: option.lockedByPrerequisite ? '#55645e'
+						: !option.canAfford ? '#c99a58'
+						: '#5bcf8d';
+					button.style.boxShadow =
+						isSelected ?
+							'0 0 0 3px rgba(255, 232, 148, 0.2), 0 0 22px rgba(255, 232, 148, 0.28)'
+						: option.owned ? '0 0 14px rgba(155, 255, 188, 0.2)'
+						: '0 0 8px rgba(0, 255, 136, 0.18)';
+					button.style.transform =
+						isSelected ?
+							'translate(-50%, -50%) scale(1.12)'
+						:	'translate(-50%, -50%) scale(1)';
+				});
+			};
+
+			const renderDetails = (): void => {
+				const option = optionById.get(selectedOptionId);
+				if (!option) {
+					detailPanel.textContent = 'Select a node to inspect it.';
+					return;
+				}
+
+				detailPanel.innerHTML = '';
+				const status = getOptionStatus(option);
+
+				const panelCaption = document.createElement('div');
+				panelCaption.textContent = 'Selected Skill';
+				panelCaption.style.fontSize = '11px';
+				panelCaption.style.textTransform = 'uppercase';
+				panelCaption.style.letterSpacing = '1.2px';
+				panelCaption.style.opacity = '0.68';
+				detailPanel.appendChild(panelCaption);
+
+				const headerRow = document.createElement('div');
+				headerRow.style.display = 'flex';
+				headerRow.style.justifyContent = 'space-between';
+				headerRow.style.alignItems = 'center';
+				headerRow.style.gap = '10px';
+				headerRow.style.marginBottom = '8px';
+				detailPanel.appendChild(headerRow);
+
+				const title = document.createElement('div');
+				title.style.fontWeight = 'bold';
+				title.style.fontSize = '16px';
+				title.textContent = option.name;
+				headerRow.appendChild(title);
+
+				const statusBadge = document.createElement('div');
+				statusBadge.textContent = status.text;
+				statusBadge.style.color = status.color;
+				statusBadge.style.fontSize = '11px';
+				statusBadge.style.border = `1px solid ${status.color}`;
+				statusBadge.style.padding = '4px 6px';
+				statusBadge.style.background = 'rgba(0, 0, 0, 0.24)';
+				statusBadge.style.borderRadius = '999px';
+				headerRow.appendChild(statusBadge);
+
+				const meta = document.createElement('div');
+				meta.style.fontSize = '11px';
+				meta.style.opacity = '0.85';
+				meta.style.marginBottom = '10px';
+				meta.textContent = `${option.kind.toUpperCase()} • ${option.category.toUpperCase()}`;
+				detailPanel.appendChild(meta);
+
+				const description = document.createElement('div');
+				description.style.lineHeight = '1.45';
+				description.style.marginBottom = '10px';
+				description.textContent = option.description;
+				detailPanel.appendChild(description);
+
+				const costRow = document.createElement('div');
+				costRow.style.fontSize = '11px';
+				costRow.style.marginBottom = '8px';
+				costRow.textContent = `Cost: Gold ${option.cost.gold} • Food ${option.cost.food} • Production ${option.cost.production}`;
+				detailPanel.appendChild(costRow);
+
+				const prereqNames =
+					option.prerequisiteIds.length ?
+						option.prerequisiteIds.map(
+							(prereqId) => optionById.get(prereqId)?.name || prereqId,
+						)
+					:	['City Core'];
+
+				const prereqRow = document.createElement('div');
+				prereqRow.style.fontSize = '11px';
+				prereqRow.style.marginBottom = '8px';
+				prereqRow.textContent = `Prerequisites: ${prereqNames.join(', ')}`;
+				detailPanel.appendChild(prereqRow);
+
+				const impactRow = document.createElement('div');
+				impactRow.style.fontSize = '11px';
+				impactRow.style.opacity = '0.88';
+				impactRow.style.marginBottom = '10px';
+				impactRow.textContent = `Impact: ${option.description}`;
+				detailPanel.appendChild(impactRow);
+
+				const nodeHint = document.createElement('div');
+				nodeHint.style.marginTop = '12px';
+				nodeHint.style.fontSize = '10px';
+				nodeHint.style.opacity = '0.65';
+				nodeHint.textContent =
+					'Path view: orbit nodes unlock from the City Core outward. Select any node in the constellation to inspect it here.';
+				detailPanel.appendChild(nodeHint);
+
+				if (!option.owned) {
+					const actionBtn = document.createElement('button');
+					actionBtn.textContent = `Unlock ${option.kind}`;
+					actionBtn.style.padding = '6px 10px';
+					actionBtn.disabled = option.lockedByPrerequisite || !option.canAfford;
+					actionBtn.addEventListener('click', () => onSelect(option.id));
+					detailPanel.appendChild(actionBtn);
+				}
+			};
+
+			options.forEach((option) => {
+				const pos = nodePos.get(option.id);
+				if (!pos) return;
+				// Count how many other nodes depend on this one to determine node prominence
+				const dependentCount = dependentCounts.get(option.id) || 0;
+				// Scale nodes by importance: 54px for hub nodes (3+ dependents), 46px for branch nodes (1-2 dependents), 38px for leaf nodes
+				const nodeSize =
+					dependentCount >= 3 ? 54
+					: dependentCount >= 1 ? 46
+					: 38;
+
+				const node = document.createElement('button');
+				node.type = 'button';
+				node.title = option.name;
+				node.style.position = 'absolute';
+				node.style.left = `${pos.x}%`;
+				node.style.top = `${pos.y}%`;
+				node.style.transform = 'translate(-50%, -50%)';
+				node.style.width = `${nodeSize}px`;
+				node.style.height = `${nodeSize}px`;
+				node.style.padding = '0';
+				node.style.display = 'flex';
+				node.style.alignItems = 'center';
+				node.style.justifyContent = 'center';
+				node.style.fontSize = dependentCount >= 3 ? '12px' : '10px';
+				node.style.fontWeight = 'bold';
+				node.style.letterSpacing = '0.6px';
+				node.style.border = '2px solid #5bcf8d';
+				node.style.borderRadius = '50%';
+				node.style.background =
+					'radial-gradient(circle at 35% 35%, rgba(166, 255, 210, 0.36), rgba(15, 42, 28, 0.95) 55%, rgba(5, 11, 8, 1) 100%)';
+				node.style.color = '#d8ffe7';
+				node.style.cursor = 'pointer';
+				node.style.transition = 'transform 120ms ease, box-shadow 120ms ease';
+				node.style.zIndex = '3';
+				node.textContent = getNodeGlyph(option);
+
+				if (option.owned) {
+					node.style.borderColor = '#9bffbc';
+					node.style.background =
+						'radial-gradient(circle at 35% 35%, rgba(226, 255, 170, 0.42), rgba(37, 78, 35, 0.94) 52%, rgba(8, 20, 10, 1) 100%)';
+				} else if (option.lockedByPrerequisite) {
+					node.style.borderColor = '#557766';
+					node.style.background =
+						'radial-gradient(circle at 35% 35%, rgba(120, 130, 126, 0.18), rgba(20, 28, 24, 0.9) 52%, rgba(10, 13, 12, 1) 100%)';
+					node.style.color = '#90a69a';
+				} else if (!option.canAfford) {
+					node.style.borderColor = '#cc9955';
+					node.style.background =
+						'radial-gradient(circle at 35% 35%, rgba(255, 214, 138, 0.24), rgba(52, 32, 18, 0.94) 52%, rgba(17, 10, 7, 1) 100%)';
+					node.style.color = '#ffd487';
+				}
+
+				node.addEventListener('click', () => {
+					selectedOptionId = option.id;
+					updateNodeSelectionStyles();
+					renderDetails();
+				});
+
+				nodeButtons.set(option.id, node);
+				nodeLayer.appendChild(node);
+			});
+
+			updateNodeSelectionStyles();
+			renderDetails();
+
+			skillLayout.appendChild(webWrap);
+			skillLayout.appendChild(detailPanel);
+			tabContent.appendChild(skillLayout);
+
+			const legend = document.createElement('div');
+			legend.style.fontSize = '11px';
+			legend.style.opacity = '0.85';
+			legend.textContent =
+				'Constellation legend: circular nodes emulate a Path of Exile-style passive tree. Larger orbs mark branch hubs, bright links show open routes, and the right-hand panel always shows the selected skill.';
+			tabContent.appendChild(legend);
 		};
 
 		sectionOrder.forEach((section, index) => {

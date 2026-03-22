@@ -62,6 +62,7 @@ export declare class UIManager {
     private refreshRightPanelTabStyles;
     private renderRightPanelContent;
     private createCityOverlay;
+    private makeOverlayDraggable;
     private createResourceOverlays;
     private createTutorialOverlay;
     private renderTutorialContent;

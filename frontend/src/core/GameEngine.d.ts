@@ -111,6 +111,7 @@ export declare class GameEngine {
     private payCost;
     private recalculateCityScale;
     private applyResearchEffects;
+    private applyProgressionBonus;
     private reapplyUnitProgression;
     private getBuildingIdleYield;
     private generateId;
