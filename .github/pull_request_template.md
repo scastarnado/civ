@@ -10,9 +10,9 @@ Explain the problem being solved or the reason for the change.
 
 List the main implementation changes.
 
-- 
-- 
-- 
+-
+-
+-
 
 ## Areas Touched
 

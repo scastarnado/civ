@@ -1,9 +1,9 @@
 ---
 name: General issue
 about: Report a bug, request a feature, or describe a task with enough detail to act on it
-title: "[Issue] "
-labels: ""
-assignees: ""
+title: '[Issue] '
+labels: ''
+assignees: ''
 ---
 
 ## Summary
@@ -34,9 +34,9 @@ Explain what should happen instead.
 
 If this is a bug, list the exact steps to reproduce it.
 
-1. 
-2. 
-3. 
+1.
+2.
+3.
 
 ## Relevant Areas
 
@@ -69,9 +69,9 @@ List anything that should be preserved or avoided.
 
 State how we will know this is complete.
 
-- [ ] 
-- [ ] 
-- [ ] 
+- [ ]
+- [ ]
+- [ ]
 
 ## Copilot Context
 
