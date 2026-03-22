@@ -17,6 +17,7 @@ export class NetworkClient {
 	private reconnectDelay: number = 1000;
 	private messageQueue: NetworkMessage[] = [];
 	private playerId: string = '';
+	private manualDisconnect: boolean = false;
 
 	constructor(url: string = 'ws://localhost:8080') {
 		this.url = url;
@@ -29,10 +30,12 @@ export class NetworkClient {
 		return new Promise((resolve, reject) => {
 			try {
 				this.playerId = playerId;
+				this.manualDisconnect = false;
 				this.ws = new WebSocket(this.url);
 
 				this.ws.onopen = () => {
 					this.isConnected = true;
+					const wasReconnecting = this.reconnectAttempts > 0;
 					this.reconnectAttempts = 0;
 					console.log('Connected to server');
 
@@ -41,6 +44,9 @@ export class NetworkClient {
 
 					// Flush message queue
 					this.flushMessageQueue();
+					this.emitConnectionStatus('connected', {
+						reconnected: wasReconnecting,
+					});
 
 					resolve();
 				};
@@ -51,13 +57,21 @@ export class NetworkClient {
 
 				this.ws.onerror = (event) => {
 					console.error('WebSocket error:', event);
+					this.emitConnectionStatus('error', { event });
 					reject(event);
 				};
 
 				this.ws.onclose = () => {
 					this.isConnected = false;
 					console.log('Disconnected from server');
-					this.attemptReconnect();
+					this.emitConnectionStatus('disconnected', {
+						willReconnect:
+							!this.manualDisconnect &&
+							this.reconnectAttempts < this.maxReconnectAttempts,
+					});
+					if (!this.manualDisconnect) {
+						this.attemptReconnect();
+					}
 				};
 			} catch (error) {
 				reject(error);
@@ -71,10 +85,18 @@ export class NetworkClient {
 	private attemptReconnect(): void {
 		if (this.reconnectAttempts >= this.maxReconnectAttempts) {
 			console.error('Max reconnection attempts reached');
+			this.emitConnectionStatus('reconnect-failed', {
+				attempts: this.reconnectAttempts,
+				maxAttempts: this.maxReconnectAttempts,
+			});
 			return;
 		}
 
 		this.reconnectAttempts++;
+		this.emitConnectionStatus('reconnecting', {
+			attempt: this.reconnectAttempts,
+			maxAttempts: this.maxReconnectAttempts,
+		});
 		console.log(
 			`Attempting reconnection (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`,
 		);
@@ -207,10 +229,22 @@ export class NetworkClient {
 		return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
 	}
 
+	private emitConnectionStatus(status: string, data: unknown = {}): void {
+		const handlers = this.messageHandlers.get('CONNECTION_STATUS') || [];
+		handlers.forEach((handler) => {
+			try {
+				handler({ status, ...(data as Record<string, unknown>) });
+			} catch (error) {
+				console.error('Error in connection status handler:', error);
+			}
+		});
+	}
+
 	/**
 	 * Disconnect
 	 */
 	disconnect(): void {
+		this.manualDisconnect = true;
 		if (this.ws) {
 			this.ws.close();
 			this.ws = null;

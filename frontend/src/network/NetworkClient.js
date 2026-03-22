@@ -12,6 +12,7 @@ export class NetworkClient {
         this.reconnectDelay = 1000;
         this.messageQueue = [];
         this.playerId = '';
+        this.manualDisconnect = false;
         this.url = url;
     }
     /**
@@ -21,15 +22,20 @@ export class NetworkClient {
         return new Promise((resolve, reject) => {
             try {
                 this.playerId = playerId;
+                this.manualDisconnect = false;
                 this.ws = new WebSocket(this.url);
                 this.ws.onopen = () => {
                     this.isConnected = true;
+                    const wasReconnecting = this.reconnectAttempts > 0;
                     this.reconnectAttempts = 0;
                     console.log('Connected to server');
                     // Send initial handshake
                     this.send('HANDSHAKE', { playerId });
                     // Flush message queue
                     this.flushMessageQueue();
+                    this.emitConnectionStatus('connected', {
+                        reconnected: wasReconnecting,
+                    });
                     resolve();
                 };
                 this.ws.onmessage = (event) => {
@@ -37,12 +43,19 @@ export class NetworkClient {
                 };
                 this.ws.onerror = (event) => {
                     console.error('WebSocket error:', event);
+                    this.emitConnectionStatus('error', { event });
                     reject(event);
                 };
                 this.ws.onclose = () => {
                     this.isConnected = false;
                     console.log('Disconnected from server');
-                    this.attemptReconnect();
+                    this.emitConnectionStatus('disconnected', {
+                        willReconnect: !this.manualDisconnect &&
+                            this.reconnectAttempts < this.maxReconnectAttempts,
+                    });
+                    if (!this.manualDisconnect) {
+                        this.attemptReconnect();
+                    }
                 };
             }
             catch (error) {
@@ -56,9 +69,17 @@ export class NetworkClient {
     attemptReconnect() {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             console.error('Max reconnection attempts reached');
+            this.emitConnectionStatus('reconnect-failed', {
+                attempts: this.reconnectAttempts,
+                maxAttempts: this.maxReconnectAttempts,
+            });
             return;
         }
         this.reconnectAttempts++;
+        this.emitConnectionStatus('reconnecting', {
+            attempt: this.reconnectAttempts,
+            maxAttempts: this.maxReconnectAttempts,
+        });
         console.log(`Attempting reconnection (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
         setTimeout(() => {
             this.connect(this.playerId).catch((err) => {
@@ -179,10 +200,22 @@ export class NetworkClient {
     isConnectedToServer() {
         return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
     }
+    emitConnectionStatus(status, data = {}) {
+        const handlers = this.messageHandlers.get('CONNECTION_STATUS') || [];
+        handlers.forEach((handler) => {
+            try {
+                handler({ status, ...data });
+            }
+            catch (error) {
+                console.error('Error in connection status handler:', error);
+            }
+        });
+    }
     /**
      * Disconnect
      */
     disconnect() {
+        this.manualDisconnect = true;
         if (this.ws) {
             this.ws.close();
             this.ws = null;

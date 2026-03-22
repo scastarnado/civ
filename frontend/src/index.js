@@ -29,6 +29,8 @@ class GameApplication {
         this.mountainPromptUnitId = null;
         this.lastTurnSignature = null;
         this.lastBlockedInputMessageAt = 0;
+        this.lastAutosaveAt = 0;
+        this.autosaveIntervalMs = 15000;
     }
     async initialize() {
         console.log('Initializing 4X Strategy Game...');
@@ -532,9 +534,50 @@ class GameApplication {
     setupNetworkHandlers() {
         if (!this.network)
             return;
+        this.network.on('CONNECTION_STATUS', (payload) => {
+            const state = payload;
+            switch (state.status) {
+                case 'reconnecting':
+                    this.ui?.addEvent(`Connection lost. Reconnecting (${state.attempt}/${state.maxAttempts})...`);
+                    break;
+                case 'connected':
+                    if (state.reconnected) {
+                        this.ui?.addEvent('Reconnected. Syncing latest game state...');
+                        this.network?.requestSync(this.gameEngine?.getTurn() || 0);
+                    }
+                    break;
+                case 'disconnected':
+                    this.ui?.addEvent(state.willReconnect ?
+                        'Disconnected from server. Attempting to recover your seat...'
+                        : 'Disconnected from server.');
+                    break;
+                case 'reconnect-failed':
+                    this.ui?.addEvent('Reconnection failed. You can keep playing offline or retry from menu.');
+                    break;
+            }
+        });
         this.network.on('STATE_UPDATE', (data) => {
             console.log('Received state update:', data);
             // Handle state updates from server
+        });
+        this.network.on('PLAYER_DISCONNECTED', (data) => {
+            const payload = data;
+            if (!payload.playerId)
+                return;
+            const seconds = Math.max(1, Math.floor((payload.graceMs || 0) / 1000));
+            this.ui?.addEvent(`Player ${payload.playerId} disconnected. Seat reserved for ${seconds}s.`);
+        });
+        this.network.on('PLAYER_RECONNECTED', (data) => {
+            const payload = data;
+            if (!payload.playerId)
+                return;
+            this.ui?.addEvent(`Player ${payload.playerId} reconnected.`);
+        });
+        this.network.on('TURN_AUTO_SKIPPED', (data) => {
+            const payload = data;
+            if (!payload.skippedPlayerId)
+                return;
+            this.ui?.addEvent(`Turn auto-skipped for disconnected player ${payload.skippedPlayerId}.`);
         });
         this.network.on('ERROR', (data) => {
             console.error('Server error:', data);
@@ -573,12 +616,10 @@ class GameApplication {
             this.updateCameraInput(deltaMs);
         }
         this.syncTurnStatus();
-        // Save periodically
-        if (this.persistence && Math.random() < 0.01) {
-            // Save every ~1% of frames
-            const gameState = this.gameEngine.getGameState();
-            this.persistence.saveGameState(gameState);
-            this.persistence.saveIdleTimestamp();
+        // Deterministic periodic autosave.
+        if (this.persistence &&
+            Date.now() - this.lastAutosaveAt >= this.autosaveIntervalMs) {
+            this.saveSnapshot('interval');
         }
         this.updateMountainDestroyUI();
         this.updateResourceGatherUI();
@@ -617,6 +658,7 @@ class GameApplication {
             this.network.endTurn();
         }
         this.ui?.addEvent('Turn ended.');
+        this.saveSnapshot('turn-end');
     }
     updateCameraInput(deltaMs) {
         if (!this.input || !this.renderer)
@@ -852,8 +894,12 @@ class GameApplication {
         this.renderer.setAIRumorHints(rumorHints);
     }
     getDirectionLabel(dx, dy) {
-        const horizontal = dx > 3 ? 'east' : dx < -3 ? 'west' : '';
-        const vertical = dy > 3 ? 'south' : dy < -3 ? 'north' : '';
+        const horizontal = dx > 3 ? 'east'
+            : dx < -3 ? 'west'
+                : '';
+        const vertical = dy > 3 ? 'south'
+            : dy < -3 ? 'north'
+                : '';
         if (horizontal && vertical) {
             return `${vertical}-${horizontal}`;
         }
@@ -922,11 +968,24 @@ class GameApplication {
             const result = this.gameEngine.applyCityOption(this.currentPlayer.id, cityId, optionId);
             this.ui.addEvent(result.message);
             if (result.ok) {
+                this.saveSnapshot('city-option');
                 this.openCityManagement(cityId);
             }
         }, () => {
             this.ui?.addEvent('Closed city management.');
         });
+    }
+    saveSnapshot(reason) {
+        if (!this.persistence || !this.gameEngine)
+            return;
+        const gameState = this.gameEngine.getGameState();
+        this.persistence.saveGameState(gameState);
+        this.persistence.saveChunks(this.gameEngine.getMapCache().serializeChunks());
+        this.persistence.saveIdleTimestamp();
+        this.lastAutosaveAt = Date.now();
+        if (reason !== 'interval') {
+            this.ui?.addEvent(`Autosaved (${reason}).`);
+        }
     }
     cleanup() {
         if (this.gameLoopId !== null) {
@@ -939,10 +998,7 @@ class GameApplication {
             this.input.clear();
         }
         if (this.persistence) {
-            const gameState = this.gameEngine?.getGameState();
-            if (gameState) {
-                this.persistence.saveGameState(gameState);
-            }
+            this.saveSnapshot('shutdown');
         }
     }
 }

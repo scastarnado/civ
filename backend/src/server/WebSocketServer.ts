@@ -13,6 +13,7 @@ export class GameServer {
 	private rooms: Map<string, GameRoom> = new Map();
 	private playerManager: PlayerManager;
 	private port: number;
+	private readonly disconnectGraceMs: number = 120000;
 
 	constructor(port: number = 8080) {
 		this.port = port;
@@ -42,9 +43,16 @@ export class GameServer {
 			ws.on('message', (data: Buffer) => {
 				try {
 					const message: NetworkMessage = JSON.parse(data.toString());
-					this.handleMessage(ws, message, playerId, roomId, (newRoomId) => {
-						roomId = newRoomId;
-					});
+					this.handleMessage(
+						ws,
+						message,
+						playerId,
+						roomId,
+						(newPlayerId, newRoomId) => {
+							playerId = newPlayerId;
+							roomId = newRoomId;
+						},
+					);
 				} catch (error) {
 					console.error('Failed to parse message:', error);
 					this.sendError(ws, 'Invalid message format');
@@ -57,7 +65,7 @@ export class GameServer {
 				if (playerId && roomId) {
 					const room = this.rooms.get(roomId);
 					if (room) {
-						room.removePlayer(playerId);
+						room.markPlayerDisconnected(playerId, this.disconnectGraceMs);
 					}
 					this.playerManager.removePlayer(playerId);
 				}
@@ -78,13 +86,12 @@ export class GameServer {
 		message: NetworkMessage,
 		playerId: string | null,
 		roomId: string | null,
-		setRoomId: (roomId: string) => void,
+		setIds: (playerId: string, roomId: string) => void,
 	): void {
 		switch (message.type) {
 			case 'HANDSHAKE':
 				this.handleHandshake(ws, message, (id, id2) => {
-					playerId = id;
-					setRoomId(id2);
+					setIds(id, id2);
 				});
 				break;
 
@@ -142,6 +149,22 @@ export class GameServer {
 		// Register player
 		this.playerManager.addPlayer(playerId, ws);
 
+		const existingRoom = this.findRoomByPlayerId(playerId);
+		if (existingRoom) {
+			existingRoom.reconnectPlayer(playerId, ws);
+			setIds(playerId, existingRoom.getRoomId());
+			this.sendState(ws, 'HANDSHAKE_ACK', {
+				playerId,
+				roomId: existingRoom.getRoomId(),
+				reconnected: true,
+				graceMs: this.disconnectGraceMs,
+			});
+			console.log(
+				`Player ${playerId} reconnected to room ${existingRoom.getRoomId()}`,
+			);
+			return;
+		}
+
 		// Find or create room (for now, single room)
 		let room = Array.from(this.rooms.values()).find(
 			(r) => r.getPlayerCount() < 4,
@@ -154,11 +177,25 @@ export class GameServer {
 			console.log(`Created new room: ${roomId}`);
 		}
 
-		room.addPlayer(playerId);
+		room.addPlayer(playerId, ws);
 		setIds(playerId, room.getRoomId());
 
-		this.sendState(ws, 'HANDSHAKE_ACK', { playerId, roomId: room.getRoomId() });
+		this.sendState(ws, 'HANDSHAKE_ACK', {
+			playerId,
+			roomId: room.getRoomId(),
+			reconnected: false,
+			graceMs: this.disconnectGraceMs,
+		});
 		console.log(`Player ${playerId} joined room ${room.getRoomId()}`);
+	}
+
+	private findRoomByPlayerId(playerId: string): GameRoom | null {
+		for (const room of this.rooms.values()) {
+			if (room.hasPlayer(playerId)) {
+				return room;
+			}
+		}
+		return null;
 	}
 
 	/**

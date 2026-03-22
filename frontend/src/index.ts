@@ -32,6 +32,8 @@ class GameApplication {
 	private mountainPromptUnitId: string | null = null;
 	private lastTurnSignature: string | null = null;
 	private lastBlockedInputMessageAt: number = 0;
+	private lastAutosaveAt: number = 0;
+	private readonly autosaveIntervalMs: number = 15000;
 
 	async initialize(): Promise<void> {
 		console.log('Initializing 4X Strategy Game...');
@@ -671,9 +673,68 @@ class GameApplication {
 	private setupNetworkHandlers(): void {
 		if (!this.network) return;
 
+		this.network.on('CONNECTION_STATUS', (payload: unknown) => {
+			const state = payload as {
+				status?: string;
+				attempt?: number;
+				maxAttempts?: number;
+				reconnected?: boolean;
+				willReconnect?: boolean;
+			};
+
+			switch (state.status) {
+				case 'reconnecting':
+					this.ui?.addEvent(
+						`Connection lost. Reconnecting (${state.attempt}/${state.maxAttempts})...`,
+					);
+					break;
+				case 'connected':
+					if (state.reconnected) {
+						this.ui?.addEvent('Reconnected. Syncing latest game state...');
+						this.network?.requestSync(this.gameEngine?.getTurn() || 0);
+					}
+					break;
+				case 'disconnected':
+					this.ui?.addEvent(
+						state.willReconnect ?
+							'Disconnected from server. Attempting to recover your seat...'
+						: 'Disconnected from server.',
+					);
+					break;
+				case 'reconnect-failed':
+					this.ui?.addEvent(
+						'Reconnection failed. You can keep playing offline or retry from menu.',
+					);
+					break;
+			}
+		});
+
 		this.network.on('STATE_UPDATE', (data: unknown) => {
 			console.log('Received state update:', data);
 			// Handle state updates from server
+		});
+
+		this.network.on('PLAYER_DISCONNECTED', (data: unknown) => {
+			const payload = data as { playerId?: string; graceMs?: number };
+			if (!payload.playerId) return;
+			const seconds = Math.max(1, Math.floor((payload.graceMs || 0) / 1000));
+			this.ui?.addEvent(
+				`Player ${payload.playerId} disconnected. Seat reserved for ${seconds}s.`,
+			);
+		});
+
+		this.network.on('PLAYER_RECONNECTED', (data: unknown) => {
+			const payload = data as { playerId?: string };
+			if (!payload.playerId) return;
+			this.ui?.addEvent(`Player ${payload.playerId} reconnected.`);
+		});
+
+		this.network.on('TURN_AUTO_SKIPPED', (data: unknown) => {
+			const payload = data as { skippedPlayerId?: string };
+			if (!payload.skippedPlayerId) return;
+			this.ui?.addEvent(
+				`Turn auto-skipped for disconnected player ${payload.skippedPlayerId}.`,
+			);
 		});
 
 		this.network.on('ERROR', (data: unknown) => {
@@ -723,12 +784,12 @@ class GameApplication {
 
 		this.syncTurnStatus();
 
-		// Save periodically
-		if (this.persistence && Math.random() < 0.01) {
-			// Save every ~1% of frames
-			const gameState = this.gameEngine.getGameState();
-			this.persistence.saveGameState(gameState);
-			this.persistence.saveIdleTimestamp();
+		// Deterministic periodic autosave.
+		if (
+			this.persistence &&
+			Date.now() - this.lastAutosaveAt >= this.autosaveIntervalMs
+		) {
+			this.saveSnapshot('interval');
 		}
 
 		this.updateMountainDestroyUI();
@@ -786,6 +847,7 @@ class GameApplication {
 		}
 
 		this.ui?.addEvent('Turn ended.');
+		this.saveSnapshot('turn-end');
 	}
 
 	private updateCameraInput(deltaMs: number): void {
@@ -1168,6 +1230,7 @@ class GameApplication {
 				);
 				this.ui.addEvent(result.message);
 				if (result.ok) {
+					this.saveSnapshot('city-option');
 					this.openCityManagement(cityId);
 				}
 			},
@@ -1175,6 +1238,20 @@ class GameApplication {
 				this.ui?.addEvent('Closed city management.');
 			},
 		);
+	}
+
+	private saveSnapshot(reason: string): void {
+		if (!this.persistence || !this.gameEngine) return;
+
+		const gameState = this.gameEngine.getGameState();
+		this.persistence.saveGameState(gameState);
+		this.persistence.saveChunks(this.gameEngine.getMapCache().serializeChunks());
+		this.persistence.saveIdleTimestamp();
+		this.lastAutosaveAt = Date.now();
+
+		if (reason !== 'interval') {
+			this.ui?.addEvent(`Autosaved (${reason}).`);
+		}
 	}
 
 	cleanup(): void {
@@ -1191,10 +1268,7 @@ class GameApplication {
 		}
 
 		if (this.persistence) {
-			const gameState = this.gameEngine?.getGameState();
-			if (gameState) {
-				this.persistence.saveGameState(gameState);
-			}
+			this.saveSnapshot('shutdown');
 		}
 	}
 }

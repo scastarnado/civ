@@ -13,6 +13,7 @@ export declare class NetworkClient {
     private reconnectDelay;
     private messageQueue;
     private playerId;
+    private manualDisconnect;
     constructor(url?: string);
     /**
      * Connect to server
@@ -58,6 +59,7 @@ export declare class NetworkClient {
      * Check connection status
      */
     isConnectedToServer(): boolean;
+    private emitConnectionStatus;
     /**
      * Disconnect
      */

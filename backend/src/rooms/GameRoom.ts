@@ -11,6 +11,10 @@ export class GameRoom {
 	private gameState: GameState | null = null;
 	private players: Map<string, { ws: WebSocket | null; player: Player }> =
 		new Map();
+	private disconnectedPlayers: Map<string, { disconnectedAt: number; graceUntil: number }> =
+		new Map();
+	private disconnectTimers: Map<string, ReturnType<typeof setTimeout>> =
+		new Map();
 	private turnOrder: string[] = [];
 	private currentPlayerIndex: number = 0;
 	private isRunning: boolean = false;
@@ -24,7 +28,8 @@ export class GameRoom {
 	 */
 	addPlayer(playerId: string, ws?: WebSocket): void {
 		if (this.players.has(playerId)) {
-			return; // Player already in room
+			this.reconnectPlayer(playerId, ws || null);
+			return;
 		}
 
 		const player: Player = {
@@ -48,12 +53,98 @@ export class GameRoom {
 		}
 	}
 
+	hasPlayer(playerId: string): boolean {
+		return this.players.has(playerId);
+	}
+
+	isPlayerDisconnected(playerId: string): boolean {
+		return this.disconnectedPlayers.has(playerId);
+	}
+
+	markPlayerDisconnected(playerId: string, graceMs: number): void {
+		const playerObj = this.players.get(playerId);
+		if (!playerObj) return;
+
+		playerObj.ws = null;
+		const now = Date.now();
+		const graceUntil = now + graceMs;
+		this.disconnectedPlayers.set(playerId, { disconnectedAt: now, graceUntil });
+
+		this.broadcastState('PLAYER_DISCONNECTED', {
+			playerId,
+			graceMs,
+		});
+
+		const existingTimer = this.disconnectTimers.get(playerId);
+		if (existingTimer) {
+			clearTimeout(existingTimer);
+		}
+
+		const timer = setTimeout(() => {
+			if (!this.disconnectedPlayers.has(playerId)) return;
+
+			const currentPlayerId = this.turnOrder[this.currentPlayerIndex];
+			if (currentPlayerId === playerId) {
+				this.forceAdvanceTurnForDisconnectedPlayer(playerId);
+			}
+
+			this.removePlayer(playerId);
+			this.broadcastState('PLAYER_REMOVED', {
+				playerId,
+				reason: 'disconnect-timeout',
+			});
+		}, graceMs);
+
+		this.disconnectTimers.set(playerId, timer);
+	}
+
+	reconnectPlayer(playerId: string, ws: WebSocket | null): void {
+		const playerObj = this.players.get(playerId);
+		if (!playerObj) return;
+
+		playerObj.ws = ws;
+		if (this.disconnectedPlayers.has(playerId)) {
+			this.disconnectedPlayers.delete(playerId);
+			const timer = this.disconnectTimers.get(playerId);
+			if (timer) {
+				clearTimeout(timer);
+				this.disconnectTimers.delete(playerId);
+			}
+
+			this.broadcastState('PLAYER_RECONNECTED', { playerId });
+		}
+	}
+
 	/**
 	 * Remove player from room
 	 */
 	removePlayer(playerId: string): void {
+		const existingTimer = this.disconnectTimers.get(playerId);
+		if (existingTimer) {
+			clearTimeout(existingTimer);
+			this.disconnectTimers.delete(playerId);
+		}
+
+		this.disconnectedPlayers.delete(playerId);
+
+		const removedIndex = this.turnOrder.indexOf(playerId);
 		this.players.delete(playerId);
 		this.turnOrder = this.turnOrder.filter((id) => id !== playerId);
+
+		if (this.gameState) {
+			this.gameState.players = this.gameState.players.filter(
+				(player) => player.id !== playerId,
+			);
+		}
+
+		if (removedIndex !== -1 && this.turnOrder.length > 0) {
+			if (removedIndex < this.currentPlayerIndex) {
+				this.currentPlayerIndex -= 1;
+			}
+			if (this.currentPlayerIndex >= this.turnOrder.length) {
+				this.currentPlayerIndex = 0;
+			}
+		}
 
 		if (this.players.size === 0) {
 			this.isRunning = false;
@@ -118,6 +209,8 @@ export class GameRoom {
 	 * End current player's turn
 	 */
 	endPlayerTurn(playerId: string): void {
+		if (this.turnOrder.length === 0) return;
+
 		const currentPlayerId = this.turnOrder[this.currentPlayerIndex];
 
 		if (playerId !== currentPlayerId) {
@@ -140,6 +233,24 @@ export class GameRoom {
 				currentPlayerIndex: this.currentPlayerIndex,
 			});
 		}
+	}
+
+	private forceAdvanceTurnForDisconnectedPlayer(playerId: string): void {
+		if (!this.gameState || this.turnOrder.length === 0) return;
+		const currentPlayerId = this.turnOrder[this.currentPlayerIndex];
+		if (currentPlayerId !== playerId) return;
+
+		this.currentPlayerIndex =
+			(this.currentPlayerIndex + 1) % this.turnOrder.length;
+		if (this.currentPlayerIndex === 0) {
+			this.gameState.turn++;
+		}
+
+		this.broadcastState('TURN_AUTO_SKIPPED', {
+			skippedPlayerId: playerId,
+			turn: this.gameState.turn,
+			currentPlayerIndex: this.currentPlayerIndex,
+		});
 	}
 
 	/**
@@ -237,10 +348,7 @@ export class GameRoom {
 	 * Update WebSocket connection for player
 	 */
 	updatePlayerConnection(playerId: string, ws: WebSocket): void {
-		const playerObj = this.players.get(playerId);
-		if (playerObj) {
-			playerObj.ws = ws;
-		}
+		this.reconnectPlayer(playerId, ws);
 	}
 
 	/**

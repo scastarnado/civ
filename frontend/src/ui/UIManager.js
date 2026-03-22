@@ -420,8 +420,12 @@ Queue: ${city.productionQueue.length > 0 ? city.productionQueue.join(', ') : 'No
                     : `+${offset}`;
             lines.push(`${prefix}: ${player.name}${player.isAI ? ' [AI]' : ' [HUMAN]'}`);
         }
-        const rumors = this.aiRumorLines.length > 0 ? this.aiRumorLines.join('\n') : 'No reliable reports yet.';
-        const intel = this.aiIntelFeed.length > 0 ? this.aiIntelFeed.join('\n') : 'No enemy activity reports yet.';
+        const rumors = this.aiRumorLines.length > 0 ?
+            this.aiRumorLines.join('\n')
+            : 'No reliable reports yet.';
+        const intel = this.aiIntelFeed.length > 0 ?
+            this.aiIntelFeed.join('\n')
+            : 'No enemy activity reports yet.';
         this.turnInfoText = `TURN\nNumber: ${turn}\nPlayers: ${players.length}\nOrder:\n${lines.join('\n')}\n\nRUMORED SETTLEMENT FRONTS\n${rumors}\n\nENEMY ACTIVITY FEED\n${intel}`;
         this.renderRightPanelContent();
     }

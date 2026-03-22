@@ -662,19 +662,19 @@ export class GameEngine {
             const buildingYield = this.getBuildingIdleYield(city);
             player.resources.production +=
                 (city.production + buildingYield.production) *
-                productionPerSecond *
-                deltaSeconds *
-                player.progression.productionMultiplier;
+                    productionPerSecond *
+                    deltaSeconds *
+                    player.progression.productionMultiplier;
             player.resources.food +=
                 (city.food + buildingYield.food) *
-                productionPerSecond *
-                deltaSeconds *
-                player.progression.foodMultiplier;
+                    productionPerSecond *
+                    deltaSeconds *
+                    player.progression.foodMultiplier;
             player.resources.gold +=
                 buildingYield.gold *
-                productionPerSecond *
-                deltaSeconds *
-                player.progression.goldMultiplier;
+                    productionPerSecond *
+                    deltaSeconds *
+                    player.progression.goldMultiplier;
         });
     }
     getPlayerVisionBonus(playerId) {
