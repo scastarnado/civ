@@ -11,8 +11,10 @@ export class GameRoom {
 	private gameState: GameState | null = null;
 	private players: Map<string, { ws: WebSocket | null; player: Player }> =
 		new Map();
-	private disconnectedPlayers: Map<string, { disconnectedAt: number; graceUntil: number }> =
-		new Map();
+	private disconnectedPlayers: Map<
+		string,
+		{ disconnectedAt: number; graceUntil: number }
+	> = new Map();
 	private disconnectTimers: Map<string, ReturnType<typeof setTimeout>> =
 		new Map();
 	private turnOrder: string[] = [];

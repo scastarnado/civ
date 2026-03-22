@@ -698,7 +698,7 @@ class GameApplication {
 					this.ui?.addEvent(
 						state.willReconnect ?
 							'Disconnected from server. Attempting to recover your seat...'
-						: 'Disconnected from server.',
+						:	'Disconnected from server.',
 					);
 					break;
 				case 'reconnect-failed':
@@ -1245,7 +1245,9 @@ class GameApplication {
 
 		const gameState = this.gameEngine.getGameState();
 		this.persistence.saveGameState(gameState);
-		this.persistence.saveChunks(this.gameEngine.getMapCache().serializeChunks());
+		this.persistence.saveChunks(
+			this.gameEngine.getMapCache().serializeChunks(),
+		);
 		this.persistence.saveIdleTimestamp();
 		this.lastAutosaveAt = Date.now();
 
