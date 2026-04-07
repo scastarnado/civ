@@ -131,9 +131,17 @@ class GameApplication {
         }
         const lastProfileKey = 'civ.lastProfileName';
         const accountSessionHintKey = 'civ.hasAccountSession';
-        const configuredApiBase = String(import.meta.env.VITE_API_BASE_URL || '')
-            .trim()
-            .replace(/\/+$/, '');
+        const normalizeApiBase = (rawValue) => {
+            const trimmed = String(rawValue || '').trim().replace(/\/+$/, '');
+            if (!trimmed)
+                return '';
+            if (/^https?:\/\//i.test(trimmed))
+                return trimmed;
+            if (trimmed.startsWith('//'))
+                return `${window.location.protocol}${trimmed}`;
+            return `https://${trimmed}`;
+        };
+        const configuredApiBase = normalizeApiBase(String(import.meta.env.VITE_API_BASE_URL || ''));
         let selectedPlayerName = localStorage.getItem(lastProfileKey) || '';
         let selectedProfileType = 'account';
         let activeAccountUsername = null;
