@@ -2,8 +2,8 @@
  * Backend Server Main Entry Point
  * Starts WebSocket server and manages rooms
  */
-import { GameServer } from '@/server/WebSocketServer';
-import { startApiServer } from '@/api/server';
+import { startApiServer } from './api/server.js';
+import { GameServer } from './server/WebSocketServer.js';
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;
 const server = new GameServer(PORT);
 let apiServer = null;

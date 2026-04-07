@@ -5,8 +5,8 @@ if (!DATABASE_URL) {
 }
 export const db = new Pool({
     connectionString: DATABASE_URL,
-    ssl: DATABASE_URL.includes('sslmode=require')
-        ? { rejectUnauthorized: false }
+    ssl: DATABASE_URL.includes('sslmode=require') ?
+        { rejectUnauthorized: false }
         : undefined,
 });
 export async function initializeDatabase() {

@@ -1,8 +1,8 @@
+import cors from 'cors';
 import crypto from 'crypto';
 import express from 'express';
-import cors from 'cors';
+import { clearSessionCookie, createSession, deleteSessionByToken, requireAuth, resolveAuthUser, setSessionCookie, } from './auth';
 import { db } from './db';
-import { clearSessionCookie, createSession, deleteSessionByToken, requireAuth, resolveAuthUser, setSessionCookie } from './auth';
 const app = express();
 app.use(cors({
     origin: true,
@@ -44,7 +44,10 @@ function canManageJoinRequests(role, governanceType) {
     return role === 'ruler' || role === 'councilor' || role === 'officer';
 }
 function isUniqueViolation(error) {
-    return Boolean(error && typeof error === 'object' && 'code' in error && error.code === '23505');
+    return Boolean(error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === '23505');
 }
 async function getUserPrimaryCivilization(userId, client = db) {
     const result = await client.query(`SELECT c.id, c.name, c.governance_type, m.role
@@ -99,7 +102,9 @@ async function ensureUserHasCivilization(userId, username) {
     const client = await db.connect();
     try {
         await client.query('BEGIN');
-        await client.query(`SELECT id FROM users WHERE id = $1 FOR UPDATE`, [userId]);
+        await client.query(`SELECT id FROM users WHERE id = $1 FOR UPDATE`, [
+            userId,
+        ]);
         const existing = await getUserPrimaryCivilization(userId, client);
         if (existing) {
             await client.query('COMMIT');
@@ -125,7 +130,9 @@ app.post('/api/auth/register', async (req, res) => {
     const password = String(req.body?.password || '');
     const email = String(req.body?.email || '').trim() || null;
     if (username.length < 3 || password.length < 6) {
-        res.status(400).json({ ok: false, error: 'Username or password too short' });
+        res
+            .status(400)
+            .json({ ok: false, error: 'Username or password too short' });
         return;
     }
     const passwordHash = hashPassword(password);
@@ -179,7 +186,9 @@ app.post('/api/auth/reset-password', async (req, res) => {
     const token = String(req.body?.token || '').trim();
     const newPassword = String(req.body?.newPassword || '');
     if (!token || newPassword.length < 6) {
-        res.status(400).json({ ok: false, error: 'Token and valid new password are required' });
+        res
+            .status(400)
+            .json({ ok: false, error: 'Token and valid new password are required' });
         return;
     }
     const tokenHash = hashResetToken(token);
@@ -188,7 +197,9 @@ app.post('/api/auth/reset-password', async (req, res) => {
 		 WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
 		 LIMIT 1`, [tokenHash]);
     if ((tokenResult.rowCount ?? 0) === 0) {
-        res.status(400).json({ ok: false, error: 'Invalid or expired reset token' });
+        res
+            .status(400)
+            .json({ ok: false, error: 'Invalid or expired reset token' });
         return;
     }
     const tokenRow = tokenResult.rows[0];
@@ -196,12 +207,20 @@ app.post('/api/auth/reset-password', async (req, res) => {
     const client = await db.connect();
     try {
         await client.query('BEGIN');
-        await client.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [newPasswordHash, Number(tokenRow.user_id)]);
+        await client.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [
+            newPasswordHash,
+            Number(tokenRow.user_id),
+        ]);
         await client.query(`UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1`, [Number(tokenRow.id)]);
-        await client.query(`DELETE FROM user_sessions WHERE user_id = $1`, [Number(tokenRow.user_id)]);
+        await client.query(`DELETE FROM user_sessions WHERE user_id = $1`, [
+            Number(tokenRow.user_id),
+        ]);
         await client.query('COMMIT');
         clearSessionCookie(res);
-        res.json({ ok: true, message: 'Password reset successful. Please login again.' });
+        res.json({
+            ok: true,
+            message: 'Password reset successful. Please login again.',
+        });
     }
     catch (error) {
         await client.query('ROLLBACK');
@@ -260,7 +279,8 @@ app.post('/api/civs', requireAuth, async (req, res) => {
     const name = String(req.body?.name || '').trim();
     const description = String(req.body?.description || '').trim();
     const governanceType = String(req.body?.governanceType || '').trim();
-    if (!name || (governanceType !== 'community' && governanceType !== 'government')) {
+    if (!name ||
+        (governanceType !== 'community' && governanceType !== 'government')) {
         res.status(400).json({ ok: false, error: 'Invalid civilization payload' });
         return;
     }
@@ -388,7 +408,9 @@ app.post('/api/civs/:id/join-requests/:requestId/decide', requireAuth, async (re
     }
     const requestRow = requestResult.rows[0];
     if (requestRow.status !== 'pending') {
-        res.status(400).json({ ok: false, error: 'Join request already resolved' });
+        res
+            .status(400)
+            .json({ ok: false, error: 'Join request already resolved' });
         return;
     }
     const status = approve ? 'approved' : 'rejected';

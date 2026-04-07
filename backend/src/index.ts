@@ -3,8 +3,8 @@
  * Starts WebSocket server and manages rooms
  */
 
-import { startApiServer } from '@/api/server';
-import { GameServer } from '@/server/WebSocketServer';
+import { startApiServer } from './api/server.js';
+import { GameServer } from './server/WebSocketServer.js';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;
 
