@@ -3,7 +3,7 @@
  * Handles WebSocket communication with backend
  */
 export class NetworkClient {
-    constructor(url = 'ws://localhost:8080') {
+    constructor(url) {
         this.ws = null;
         this.isConnected = false;
         this.messageHandlers = new Map();
@@ -14,7 +14,24 @@ export class NetworkClient {
         this.playerId = '';
         this.playerName = 'Player';
         this.manualDisconnect = false;
-        this.url = url;
+        this.url = url || NetworkClient.resolveDefaultUrl();
+    }
+    static resolveDefaultUrl() {
+        if (typeof window === 'undefined') {
+            return 'ws://localhost:8080';
+        }
+        const params = new URLSearchParams(window.location.search);
+        const queryUrl = params.get('wsUrl')?.trim();
+        if (queryUrl) {
+            return queryUrl;
+        }
+        const storedUrl = window.localStorage.getItem('civ.wsUrl')?.trim();
+        if (storedUrl) {
+            return storedUrl;
+        }
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const hostname = window.location.hostname || 'localhost';
+        return `${protocol}://${hostname}:8080`;
     }
     /**
      * Connect to server
@@ -23,7 +40,8 @@ export class NetworkClient {
         return new Promise((resolve, reject) => {
             try {
                 this.playerId = playerId;
-                this.playerName = (playerName || this.playerName || 'Player').trim() || 'Player';
+                this.playerName =
+                    (playerName || this.playerName || 'Player').trim() || 'Player';
                 this.manualDisconnect = false;
                 this.ws = new WebSocket(this.url);
                 this.ws.onopen = () => {

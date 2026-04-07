@@ -1082,11 +1082,10 @@ export class GameEngine {
 			const y = candidateY < 0 ? candidateY + 100 : candidateY;
 			const tile = this.mapCache.getTile(x, y);
 			if (!tile) continue;
-			if (tile.type === TileType.WATER || tile.type === TileType.MOUNTAIN) continue;
+			if (tile.type === TileType.WATER || tile.type === TileType.MOUNTAIN)
+				continue;
 			const occupied = this.gameState.players.some((existingPlayer) =>
-				existingPlayer.cities.some(
-					(city) => city.x === x && city.y === y,
-				),
+				existingPlayer.cities.some((city) => city.x === x && city.y === y),
 			);
 			if (!occupied) {
 				return { x, y };

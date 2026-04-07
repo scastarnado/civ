@@ -16,6 +16,7 @@ export declare class NetworkClient {
     private playerName;
     private manualDisconnect;
     constructor(url?: string);
+    private static resolveDefaultUrl;
     /**
      * Connect to server
      */

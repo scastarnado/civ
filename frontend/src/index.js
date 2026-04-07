@@ -338,10 +338,15 @@ class GameApplication {
             const playerName = await resolveProfileName();
             if (!playerName)
                 return;
-            await this.ensureMultiplayerConnection(playerName);
-            this.network?.joinMatchmakingQueue();
-            mpQueueStatus.textContent = 'Searching...';
-            setMessage('Searching for match (4 players)...');
+            try {
+                await this.ensureMultiplayerConnection(playerName);
+                this.network?.joinMatchmakingQueue();
+                mpQueueStatus.textContent = 'Searching...';
+                setMessage('Searching for match (4 players)...');
+            }
+            catch {
+                setMessage('Could not connect to multiplayer server. Check backend address and try again.', true);
+            }
         });
         mpQueueCancelBtn.addEventListener('click', () => {
             this.network?.leaveMatchmakingQueue();
@@ -352,9 +357,14 @@ class GameApplication {
             const playerName = await resolveProfileName();
             if (!playerName)
                 return;
-            await this.ensureMultiplayerConnection(playerName);
-            this.network?.hostFriendsLobby();
-            setMessage('Creating lobby...');
+            try {
+                await this.ensureMultiplayerConnection(playerName);
+                this.network?.hostFriendsLobby();
+                setMessage('Creating lobby...');
+            }
+            catch {
+                setMessage('Could not connect to multiplayer server. Check backend address and try again.', true);
+            }
         });
         mpJoinBtn.addEventListener('click', async () => {
             const code = mpJoinCodeInput.value.trim().toUpperCase();
@@ -365,9 +375,14 @@ class GameApplication {
             const playerName = await resolveProfileName();
             if (!playerName)
                 return;
-            await this.ensureMultiplayerConnection(playerName);
-            this.network?.joinFriendsLobby(code);
-            setMessage(`Joining lobby ${code}...`);
+            try {
+                await this.ensureMultiplayerConnection(playerName);
+                this.network?.joinFriendsLobby(code);
+                setMessage(`Joining lobby ${code}...`);
+            }
+            catch {
+                setMessage('Could not connect to multiplayer server. Check backend address and try again.', true);
+            }
         });
         mpLobbyStartBtn.addEventListener('click', () => {
             this.network?.startLobbyGame();
@@ -409,6 +424,13 @@ class GameApplication {
         window.addEventListener('civ:match-found', () => {
             setMessage('Match found. Starting game...');
         });
+        window.addEventListener('civ:network-error', (event) => {
+            const payload = event.detail || {};
+            const message = typeof payload.message === 'string' ?
+                payload.message
+                : 'Multiplayer error. Please verify server connection.';
+            setMessage(message, true);
+        });
     }
     async ensureMultiplayerConnection(playerName) {
         if (!this.multiplayerPlayerId) {
@@ -447,9 +469,7 @@ class GameApplication {
         };
         let humanPlayer = null;
         if (isMultiplayer) {
-            const lobbyPlayers = Array.isArray(options?.lobbyPlayers)
-                ? options.lobbyPlayers
-                : [];
+            const lobbyPlayers = Array.isArray(options?.lobbyPlayers) ? options.lobbyPlayers : [];
             const localId = this.multiplayerPlayerId || `player-${Date.now()}`;
             const palette = ['#00ff00', '#ff0000', '#0000ff', '#ffff00'];
             if (lobbyPlayers.length > 0) {
@@ -842,9 +862,8 @@ class GameApplication {
         });
         this.network.on('ERROR', (data) => {
             console.error('Server error:', data);
-            const message = typeof data === 'string' ?
-                data
-                : data?.error || 'Unknown server error';
+            const message = typeof data === 'string' ? data : (data?.error || 'Unknown server error');
+            window.dispatchEvent(new CustomEvent('civ:network-error', { detail: { message } }));
             if (this.ui) {
                 this.ui.addEvent(`Server error: ${message}`);
             }
