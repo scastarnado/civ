@@ -132,7 +132,9 @@ class GameApplication {
         const lastProfileKey = 'civ.lastProfileName';
         const accountSessionHintKey = 'civ.hasAccountSession';
         const normalizeApiBase = (rawValue) => {
-            const trimmed = String(rawValue || '').trim().replace(/\/+$/, '');
+            const trimmed = String(rawValue || '')
+                .trim()
+                .replace(/\/+$/, '');
             if (!trimmed)
                 return '';
             if (/^https?:\/\//i.test(trimmed))

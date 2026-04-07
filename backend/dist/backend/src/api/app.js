@@ -4,8 +4,28 @@ import express from 'express';
 import { clearSessionCookie, createSession, deleteSessionByToken, requireAuth, resolveAuthUser, setSessionCookie, } from './auth';
 import { db } from './db';
 const app = express();
+const configuredCorsOrigins = String(process.env.CORS_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+const defaultCorsOrigins = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://civai-scast.vercel.app',
+];
+const allowedCorsOrigins = new Set(configuredCorsOrigins.length > 0 ? configuredCorsOrigins : defaultCorsOrigins);
 app.use(cors({
-    origin: true,
+    origin: (origin, callback) => {
+        if (!origin) {
+            callback(null, true);
+            return;
+        }
+        if (allowedCorsOrigins.has(origin)) {
+            callback(null, true);
+            return;
+        }
+        callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
     credentials: true,
 }));
 app.use(express.json());
