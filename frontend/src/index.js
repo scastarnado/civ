@@ -130,11 +130,16 @@ class GameApplication {
             return;
         }
         const lastProfileKey = 'civ.lastProfileName';
+        const accountSessionHintKey = 'civ.hasAccountSession';
+        const configuredApiBase = String(import.meta.env.VITE_API_BASE_URL || '')
+            .trim()
+            .replace(/\/+$/, '');
         let selectedPlayerName = localStorage.getItem(lastProfileKey) || '';
         let selectedProfileType = 'account';
         let activeAccountUsername = null;
         let activeCivilization = null;
         let multiplayerChoice = 'search';
+        const apiUrl = (path) => configuredApiBase ? `${configuredApiBase}${path}` : path;
         const postJson = async (url, body) => {
             const response = await fetch(url, {
                 method: 'POST',
@@ -144,8 +149,17 @@ class GameApplication {
             });
             return await response.json();
         };
-        const getJson = async (url) => {
-            const response = await fetch(url, {
+        const postApiJson = async (path, body) => {
+            const response = await fetch(apiUrl(path), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(body),
+            });
+            return await response.json();
+        };
+        const getJson = async (path) => {
+            const response = await fetch(apiUrl(path), {
                 method: 'GET',
                 credentials: 'include',
             });
@@ -170,8 +184,7 @@ class GameApplication {
             selectedPlayerName = name.trim() || 'Player';
             selectedProfileType = type;
             activeCivilization = normalizeCivilization(civilization);
-            this.currentCivilization =
-                type === 'account' ? activeCivilization : null;
+            this.currentCivilization = type === 'account' ? activeCivilization : null;
             selectedProfile.textContent =
                 activeCivilization ?
                     `Account: ${selectedPlayerName} | Civ: ${activeCivilization.name}`
@@ -189,6 +202,7 @@ class GameApplication {
             selectedProfile.textContent = 'Not logged in';
             startBtn.disabled = true;
             logoutBtn.disabled = true;
+            localStorage.removeItem(accountSessionHintKey);
         };
         const setActiveTab = (tab) => {
             authTabs.forEach((btn) => {
@@ -251,12 +265,17 @@ class GameApplication {
         setMultiplayerChoice(multiplayerChoice);
         updateModeUI();
         const syncFromSession = async () => {
+            if (localStorage.getItem(accountSessionHintKey) !== '1') {
+                setMessage('Login required to play.');
+                return;
+            }
             try {
                 const me = await getJson('/api/auth/me');
                 if (me.ok && me.user) {
                     activeAccountUsername = me.user.username;
                     updateSelectedProfile(me.user.username, 'account', normalizeCivilization(me.civilization));
                     setMessage(`Session restored for ${me.user.username}${me.civilization?.name ? ` (${me.civilization.name})` : ''}.`);
+                    localStorage.setItem(accountSessionHintKey, '1');
                 }
                 else {
                     setLoggedOutProfile();
@@ -296,7 +315,7 @@ class GameApplication {
                 return;
             }
             try {
-                const result = await postJson('/api/auth/login', {
+                const result = await postApiJson('/api/auth/login', {
                     identifier: username,
                     password,
                 });
@@ -307,6 +326,7 @@ class GameApplication {
                 activeAccountUsername = result.user.username;
                 updateSelectedProfile(result.user.username, 'account', normalizeCivilization(result.civilization));
                 setMessage(`Logged in as ${result.user.username}${result.civilization?.name ? ` (${result.civilization.name})` : ''}.`);
+                localStorage.setItem(accountSessionHintKey, '1');
             }
             catch {
                 setMessage('Login service unavailable. Try again.', true);
@@ -319,7 +339,7 @@ class GameApplication {
                 return;
             }
             try {
-                const result = await postJson('/api/auth/forgot-password', {
+                const result = await postApiJson('/api/auth/forgot-password', {
                     identifier,
                 });
                 if (!result.ok) {
@@ -331,7 +351,8 @@ class GameApplication {
                     setMessage(`Reset token generated. It expires in ${result.expiresInMinutes || 30} minutes.`);
                 }
                 else {
-                    setMessage(result.message || 'If account exists, reset instructions were sent.');
+                    setMessage(result.message ||
+                        'If account exists, reset instructions were sent.');
                 }
             }
             catch {
@@ -355,7 +376,7 @@ class GameApplication {
                 return;
             }
             try {
-                const result = await postJson('/api/auth/reset-password', {
+                const result = await postApiJson('/api/auth/reset-password', {
                     token,
                     newPassword,
                 });
@@ -392,7 +413,7 @@ class GameApplication {
                 return;
             }
             try {
-                const result = await postJson('/api/auth/register', {
+                const result = await postApiJson('/api/auth/register', {
                     email,
                     username,
                     password,
@@ -404,6 +425,7 @@ class GameApplication {
                 activeAccountUsername = result.user.username;
                 updateSelectedProfile(result.user.username, 'account', normalizeCivilization(result.civilization));
                 setMessage(`Account created for ${result.user.username}${result.civilization?.name ? ` (${result.civilization.name})` : ''}.`);
+                localStorage.setItem(accountSessionHintKey, '1');
                 registerPassword.value = '';
                 registerPasswordConfirm.value = '';
             }
@@ -413,7 +435,7 @@ class GameApplication {
         });
         logoutBtn.addEventListener('click', async () => {
             try {
-                await postJson('/api/auth/logout', {});
+                await postApiJson('/api/auth/logout', {});
                 setLoggedOutProfile();
                 setActiveTab('login');
                 setMessage('Logged out. Please login to play.');
