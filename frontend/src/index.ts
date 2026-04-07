@@ -36,6 +36,7 @@ class GameApplication {
 		this.networkHandlersBound = false;
 		this.multiplayerPlayerId = null;
 		this.multiplayerPlayerName = null;
+		this.currentCivilization = null;
 		this.currentLobbyRoomId = null;
 		this.currentLobbyCode = null;
 		this.isStartingMultiplayerGame = false;
@@ -61,6 +62,14 @@ class GameApplication {
 		const loginUsername = document.getElementById('login-username');
 		const loginPassword = document.getElementById('login-password');
 		const loginActionBtn = document.getElementById('login-action-btn');
+		const forgotIdentifier = document.getElementById('forgot-identifier');
+		const forgotRequestBtn = document.getElementById('forgot-request-btn');
+		const forgotResetToken = document.getElementById('forgot-reset-token');
+		const forgotNewPassword = document.getElementById('forgot-new-password');
+		const forgotNewPasswordConfirm = document.getElementById(
+			'forgot-new-password-confirm',
+		);
+		const forgotResetBtn = document.getElementById('forgot-reset-btn');
 		const registerUsername = document.getElementById('register-username');
 		const registerEmail = document.getElementById('register-email');
 		const registerPassword = document.getElementById('register-password');
@@ -68,8 +77,6 @@ class GameApplication {
 			'register-password-confirm',
 		);
 		const registerActionBtn = document.getElementById('register-action-btn');
-		const guestNameInput = document.getElementById('guest-player-name');
-		const guestActionBtn = document.getElementById('guest-action-btn');
 		const authMessage = document.getElementById('auth-message');
 		const selectedProfile = document.getElementById('selected-profile-name');
 		const multiplayerOptions = document.getElementById('multiplayer-options');
@@ -95,13 +102,17 @@ class GameApplication {
 			!loginUsername ||
 			!loginPassword ||
 			!loginActionBtn ||
+			!forgotIdentifier ||
+			!forgotRequestBtn ||
+			!forgotResetToken ||
+			!forgotNewPassword ||
+			!forgotNewPasswordConfirm ||
+			!forgotResetBtn ||
 			!registerUsername ||
 			!registerEmail ||
 			!registerPassword ||
 			!registerPasswordConfirm ||
 			!registerActionBtn ||
-			!guestNameInput ||
-			!guestActionBtn ||
 			!authMessage ||
 			!selectedProfile ||
 			!multiplayerOptions ||
@@ -125,9 +136,10 @@ class GameApplication {
 			return;
 		}
 		const lastProfileKey = 'civ.lastProfileName';
-		let selectedPlayerName = localStorage.getItem(lastProfileKey) || 'Player';
-		let selectedProfileType = 'guest';
+		let selectedPlayerName = localStorage.getItem(lastProfileKey) || '';
+		let selectedProfileType = 'account';
 		let activeAccountUsername = null;
+		let activeCivilization = null;
 		let multiplayerChoice = 'search';
 		const postJson = async (url, body) => {
 			const response = await fetch(url, {
@@ -149,23 +161,44 @@ class GameApplication {
 			authMessage.textContent = text;
 			authMessage.style.color = isError ? '#ff8080' : '#9ef5cf';
 		};
-		const updateSelectedProfile = (name, type) => {
+		const normalizeCivilization = (civilization) => {
+			if (!civilization || typeof civilization !== 'object') return null;
+			if (!civilization.name) return null;
+			return {
+				id: Number(civilization.id),
+				name: String(civilization.name),
+				role: String(civilization.role || 'citizen'),
+			};
+		};
+		const updateSelectedProfile = (name, type, civilization = null) => {
 			selectedPlayerName = name.trim() || 'Player';
 			selectedProfileType = type;
+			activeCivilization = normalizeCivilization(civilization);
+			this.currentCivilization = type === 'account' ? activeCivilization : null;
 			selectedProfile.textContent =
-				type === 'guest' ?
-					`Guest: ${selectedPlayerName}`
+				activeCivilization ?
+					`Account: ${selectedPlayerName} | Civ: ${activeCivilization.name}`
 				:	`Account: ${selectedPlayerName}`;
-			startBtn.disabled = selectedPlayerName.length === 0;
+			startBtn.disabled = selectedPlayerName.length === 0 || type !== 'account';
 			logoutBtn.disabled = type !== 'account';
 			localStorage.setItem(lastProfileKey, selectedPlayerName);
+		};
+		const setLoggedOutProfile = () => {
+			selectedPlayerName = '';
+			selectedProfileType = 'none';
+			activeAccountUsername = null;
+			activeCivilization = null;
+			this.currentCivilization = null;
+			selectedProfile.textContent = 'Not logged in';
+			startBtn.disabled = true;
+			logoutBtn.disabled = true;
 		};
 		const setActiveTab = (tab) => {
 			authTabs.forEach((btn) => {
 				const active = btn.dataset.authTab === tab;
 				btn.classList.toggle('active', active);
 			});
-			const panels = ['login', 'register', 'guest'];
+			const panels = ['login', 'register'];
 			panels.forEach((panelName) => {
 				const panel = document.getElementById(`auth-panel-${panelName}`);
 				if (!panel) return;
@@ -185,25 +218,25 @@ class GameApplication {
 			startBtn.style.display = isMultiplayer ? 'none' : 'block';
 		};
 		const resolveProfileName = async () => {
-			let playerName = selectedPlayerName || 'Player';
-			if (selectedProfileType === 'account') {
-				try {
-					const me = await getJson('/api/auth/me');
-					if (!me.ok || !me.user) {
-						setMessage('Session expired. Please login again.', true);
-						setActiveTab('login');
-						return null;
-					}
-					playerName = me.user.username;
-					activeAccountUsername = me.user.username;
-				} catch {
-					setMessage('Cannot verify session. Check connection.', true);
+			try {
+				const me = await getJson('/api/auth/me');
+				if (!me.ok || !me.user) {
+					setLoggedOutProfile();
+					setMessage('Please login with an account to play.', true);
+					setActiveTab('login');
 					return null;
 				}
-			} else if (activeAccountUsername) {
-				playerName = activeAccountUsername;
+				activeAccountUsername = me.user.username;
+				updateSelectedProfile(
+					me.user.username,
+					'account',
+					normalizeCivilization(me.civilization),
+				);
+				return me.user.username;
+			} catch {
+				setMessage('Cannot verify session. Check connection.', true);
+				return null;
 			}
-			return playerName;
 		};
 		const renderLobby = (payload) => {
 			mpLobbyPanel.classList.add('active');
@@ -218,8 +251,8 @@ class GameApplication {
 			mpLobbyStartBtn.style.display =
 				payload.hostPlayerId === this.multiplayerPlayerId ? 'block' : 'none';
 		};
-		updateSelectedProfile(selectedPlayerName, selectedProfileType);
-		setActiveTab('guest');
+		setLoggedOutProfile();
+		setActiveTab('login');
 		setMultiplayerChoice(multiplayerChoice);
 		updateModeUI();
 		const syncFromSession = async () => {
@@ -227,11 +260,20 @@ class GameApplication {
 				const me = await getJson('/api/auth/me');
 				if (me.ok && me.user) {
 					activeAccountUsername = me.user.username;
-					updateSelectedProfile(me.user.username, 'account');
-					setMessage(`Session restored for ${me.user.username}.`);
+					updateSelectedProfile(
+						me.user.username,
+						'account',
+						normalizeCivilization(me.civilization),
+					);
+					setMessage(
+						`Session restored for ${me.user.username}${me.civilization?.name ? ` (${me.civilization.name})` : ''}.`,
+					);
+				} else {
+					setLoggedOutProfile();
+					setMessage('Please login with an account to play.');
 				}
 			} catch {
-				// Keep guest mode silently on network/api failures.
+				setLoggedOutProfile();
 			}
 		};
 		void syncFromSession();
@@ -275,10 +317,82 @@ class GameApplication {
 					return;
 				}
 				activeAccountUsername = result.user.username;
-				updateSelectedProfile(result.user.username, 'account');
-				setMessage(`Logged in as ${result.user.username}.`);
+				updateSelectedProfile(
+					result.user.username,
+					'account',
+					normalizeCivilization(result.civilization),
+				);
+				setMessage(
+					`Logged in as ${result.user.username}${result.civilization?.name ? ` (${result.civilization.name})` : ''}.`,
+				);
 			} catch {
 				setMessage('Login service unavailable. Try again.', true);
+			}
+		});
+		forgotRequestBtn.addEventListener('click', async () => {
+			const identifier = forgotIdentifier.value.trim();
+			if (!identifier) {
+				setMessage('Enter your username or email for password reset.', true);
+				return;
+			}
+			try {
+				const result = await postJson('/api/auth/forgot-password', {
+					identifier,
+				});
+				if (!result.ok) {
+					setMessage(result.error || 'Could not generate reset token.', true);
+					return;
+				}
+				if (typeof result.resetToken === 'string' && result.resetToken) {
+					forgotResetToken.value = result.resetToken;
+					setMessage(
+						`Reset token generated. It expires in ${result.expiresInMinutes || 30} minutes.`,
+					);
+				} else {
+					setMessage(
+						result.message ||
+							'If account exists, reset instructions were sent.',
+					);
+				}
+			} catch {
+				setMessage('Password reset service unavailable. Try again.', true);
+			}
+		});
+		forgotResetBtn.addEventListener('click', async () => {
+			const token = forgotResetToken.value.trim();
+			const newPassword = forgotNewPassword.value;
+			const confirmPassword = forgotNewPasswordConfirm.value;
+			if (!token || !newPassword) {
+				setMessage('Reset token and new password are required.', true);
+				return;
+			}
+			if (newPassword.length < 6) {
+				setMessage('New password must be at least 6 characters.', true);
+				return;
+			}
+			if (newPassword !== confirmPassword) {
+				setMessage('New password confirmation does not match.', true);
+				return;
+			}
+			try {
+				const result = await postJson('/api/auth/reset-password', {
+					token,
+					newPassword,
+				});
+				if (!result.ok) {
+					setMessage(result.error || 'Could not reset password.', true);
+					return;
+				}
+				loginPassword.value = '';
+				forgotNewPassword.value = '';
+				forgotNewPasswordConfirm.value = '';
+				forgotResetToken.value = '';
+				setMessage(
+					result.message || 'Password reset successful. Please login.',
+				);
+				setActiveTab('login');
+			} catch {
+				setMessage('Password reset service unavailable. Try again.', true);
 			}
 		});
 		registerActionBtn.addEventListener('click', async () => {
@@ -309,27 +423,26 @@ class GameApplication {
 					return;
 				}
 				activeAccountUsername = result.user.username;
-				updateSelectedProfile(result.user.username, 'account');
-				setMessage(`Account created for ${result.user.username}.`);
+				updateSelectedProfile(
+					result.user.username,
+					'account',
+					normalizeCivilization(result.civilization),
+				);
+				setMessage(
+					`Account created for ${result.user.username}${result.civilization?.name ? ` (${result.civilization.name})` : ''}.`,
+				);
 				registerPassword.value = '';
 				registerPasswordConfirm.value = '';
 			} catch {
 				setMessage('Registration service unavailable. Try again.', true);
 			}
 		});
-		guestActionBtn.addEventListener('click', () => {
-			const guestName = guestNameInput.value.trim() || 'Player';
-			activeAccountUsername = null;
-			updateSelectedProfile(guestName, 'guest');
-			setMessage(`Guest profile ready: ${guestName}.`);
-		});
 		logoutBtn.addEventListener('click', async () => {
 			try {
 				await postJson('/api/auth/logout', {});
-				activeAccountUsername = null;
-				updateSelectedProfile(guestNameInput.value.trim() || 'Player', 'guest');
-				setActiveTab('guest');
-				setMessage('Logged out. Guest mode active.');
+				setLoggedOutProfile();
+				setActiveTab('login');
+				setMessage('Logged out. Please login to play.');
 			} catch {
 				setMessage('Logout service unavailable.', true);
 			}
@@ -400,6 +513,7 @@ class GameApplication {
 		startBtn.addEventListener('click', async () => {
 			const playerName = await resolveProfileName();
 			if (!playerName) return;
+			this.currentCivilization = activeCivilization;
 			this.startGame(playerName, false).catch((err) => {
 				console.error('Failed to start game:', err);
 				this.ui?.addEvent(`Error: ${err.message}`);
@@ -471,6 +585,7 @@ class GameApplication {
 			productionMultiplier: 1,
 			goldMultiplier: 1,
 		};
+		const activeCivilization = this.currentCivilization;
 
 		let humanPlayer = null;
 		if (isMultiplayer) {
@@ -508,6 +623,8 @@ class GameApplication {
 					name: playerName,
 					isAI: false,
 					isHuman: true,
+					civilizationId: activeCivilization?.id || null,
+					civilizationName: activeCivilization?.name || null,
 					resources: { gold: 100, food: 50, production: 25 },
 					units: [],
 					cities: [],
@@ -523,6 +640,8 @@ class GameApplication {
 				name: playerName,
 				isAI: false,
 				isHuman: true,
+				civilizationId: activeCivilization?.id || null,
+				civilizationName: activeCivilization?.name || null,
 				resources: { gold: 100, food: 50, production: 25 },
 				units: [],
 				cities: [],
@@ -608,6 +727,9 @@ class GameApplication {
 		if (gameContainer) gameContainer.style.display = 'flex';
 		if (bottomPanel) bottomPanel.style.display = 'block';
 		this.ui?.addEvent('Tips: Click your units/cities to select.');
+		if (humanPlayer?.civilizationName) {
+			this.ui?.addEvent(`Civilization: ${humanPlayer.civilizationName}`);
+		}
 		this.ui?.addEvent(
 			'Press Esc to open the game menu. Press H for the strategy handbook.',
 		);

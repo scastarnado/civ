@@ -11,10 +11,18 @@
         "type-check": "tsc --noEmit"
     },
     "dependencies": {
+        "cookie": "^1.1.1",
+        "cors": "^2.8.6",
+        "express": "^5.2.1",
+        "pg": "^8.20.0",
         "ws": "^8.14.0"
     },
     "devDependencies": {
+        "@types/cookie": "^0.6.0",
+        "@types/cors": "^2.8.19",
+        "@types/express": "^5.0.6",
         "@types/node": "^20.0.0",
+        "@types/pg": "^8.20.0",
         "@types/ws": "^8.5.0",
         "esbuild": "^0.27.4",
         "tsconfig-paths": "^4.2.0",

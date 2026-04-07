@@ -303,7 +303,7 @@
 
         .menu-tabs {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 6px;
         }
 
@@ -454,7 +454,7 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="/assets/index-EFxZK4nK.js"></script>
+  <script type="module" crossorigin src="/assets/index-cZWtSy-S.js"></script>
 </head>
 
 <body>
@@ -499,7 +499,6 @@
                     <div class="menu-tabs">
                         <button class="menu-tab active" data-auth-tab="login" type="button">Login</button>
                         <button class="menu-tab" data-auth-tab="register" type="button">Register</button>
-                        <button class="menu-tab" data-auth-tab="guest" type="button">Guest</button>
                     </div>
 
                     <div id="auth-panel-login" class="auth-panel active">
@@ -512,6 +511,24 @@
                             <input id="login-password" type="password" placeholder="Password">
                         </div>
                         <button id="login-action-btn" type="button">Login</button>
+                        <div class="menu-row" style="margin-top: 8px; border-top: 1px solid #155433; padding-top: 8px;">
+                            <label for="forgot-identifier">Forgot Password</label>
+                            <input id="forgot-identifier" type="text" placeholder="Username or email">
+                            <button id="forgot-request-btn" type="button">Generate Reset Token</button>
+                        </div>
+                        <div class="menu-row">
+                            <label for="forgot-reset-token">Reset Token</label>
+                            <input id="forgot-reset-token" type="text" placeholder="Paste reset token">
+                        </div>
+                        <div class="menu-row">
+                            <label for="forgot-new-password">New Password</label>
+                            <input id="forgot-new-password" type="password" placeholder="New password (min 6 chars)">
+                        </div>
+                        <div class="menu-row">
+                            <label for="forgot-new-password-confirm">Confirm New Password</label>
+                            <input id="forgot-new-password-confirm" type="password" placeholder="Repeat new password">
+                            <button id="forgot-reset-btn" type="button">Reset Password</button>
+                        </div>
                     </div>
 
                     <div id="auth-panel-register" class="auth-panel">
@@ -534,18 +551,10 @@
                         <button id="register-action-btn" type="button">Create Account</button>
                     </div>
 
-                    <div id="auth-panel-guest" class="auth-panel">
-                        <div class="menu-row">
-                            <label for="guest-player-name">Guest Name</label>
-                            <input id="guest-player-name" type="text" placeholder="Player" value="Player">
-                        </div>
-                        <button id="guest-action-btn" type="button">Use Guest Profile</button>
-                    </div>
-
                     <div id="auth-message"></div>
 
                     <div class="menu-bottom">
-                        <div>Selected Profile: <span id="selected-profile-name">Guest: Player</span></div>
+                        <div>Selected Profile: <span id="selected-profile-name">Not logged in</span></div>
                         <button id="logout-btn" type="button">Logout Account Session</button>
                         <div class="menu-row">
                             <label for="game-mode">Mode</label>
